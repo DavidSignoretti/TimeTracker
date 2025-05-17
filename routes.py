@@ -256,7 +256,17 @@ def time_entries():
 def timer():
     clients = Client.query.order_by(Client.name).all()
     today = date.today()
-    return render_template('timer.html', clients=clients, today=today)
+    
+    # Get active tasks for task selector
+    tasks = Task.query.filter(Task.status != TaskStatus.ARCHIVED.value).order_by(Task.priority.desc()).all()
+    
+    return render_template('timer.html', 
+                          clients=clients, 
+                          today=today,
+                          tasks=tasks,
+                          selected_client_id=None,
+                          item=None,
+                          task_id=None)
 
 @app.route('/save-timer', methods=['POST'])
 def save_timer():
@@ -271,10 +281,22 @@ def save_timer():
         time_out = datetime.strptime(request.form['time_out'], '%H:%M').time()
         total_hours = float(request.form['total_hours'])
         
+        # Get task_id if it exists
+        task_id = request.form.get('task_id')
+        if task_id and task_id.strip():
+            task_id = int(task_id)
+            # If a task is linked, update its status to in_progress if it's in todo
+            task = Task.query.get(task_id)
+            if task and task.status == TaskStatus.TODO.value:
+                task.status = TaskStatus.IN_PROGRESS.value
+        else:
+            task_id = None
+            
         new_entry = TimeEntry(
             client_id=client_id,
             location=location,
             item=item,
+            task_id=task_id,
             date=entry_date,
             time_in=time_in,
             time_out=time_out,

@@ -83,7 +83,16 @@
                 <tr>
                     <td>{{ entry.date.strftime('%Y-%m-%d') }}</td>
                     <td>{{ entry.client.name }}</td>
-                    <td>{{ entry.item }}</td>
+                    <td>
+                        {{ entry.item }}
+                        {% if entry.task_id %}
+                            <br><small class="text-muted">
+                                <a href="{{ url_for('edit_task', task_id=entry.task_id) }}">
+                                    <i class="fas fa-link"></i> Linked Task
+                                </a>
+                            </small>
+                        {% endif %}
+                    </td>
                     <td>{{ entry.location or '' }}</td>
                     <td>{{ entry.time_in.strftime('%H:%M') }}</td>
                     <td>{{ entry.time_out.strftime('%H:%M') }}</td>

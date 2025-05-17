@@ -33,6 +33,7 @@ class TimeEntry(db.Model):
     client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
     location = db.Column(db.String(100), nullable=True)
     item = db.Column(db.String(100), nullable=False)  # Task or service provided
+    task_id = db.Column(db.Integer, db.ForeignKey('task.id'), nullable=True)  # Link to a task if applicable
     date = db.Column(db.Date, nullable=False)
     time_in = db.Column(db.Time, nullable=False)
     time_out = db.Column(db.Time, nullable=False)
@@ -78,8 +79,9 @@ class Task(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
-    # Add relationship to client
+    # Add relationships
     client = db.relationship('Client', backref=db.backref('tasks', lazy=True, cascade="all, delete-orphan"))
+    time_entries = db.relationship('TimeEntry', backref='task', lazy=True)
     
     def __repr__(self):
         return f'<Task {self.id}: {self.title}>'
