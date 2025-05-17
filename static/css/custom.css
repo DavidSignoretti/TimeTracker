@@ -3,6 +3,103 @@
  * Custom CSS styles - using minimal overrides as we're using Bootstrap
  */
 
+:root {
+    --primary-color: #222732;
+    --secondary-color: #cccccc;
+    --white-color: #ffffff;
+    --bs-primary: var(--primary-color);
+    --bs-secondary: var(--secondary-color);
+}
+
+/* Override Bootstrap theme colors */
+.bg-primary {
+    background-color: var(--primary-color) !important;
+}
+
+.bg-secondary {
+    background-color: var(--secondary-color) !important;
+}
+
+.bg-dark {
+    background-color: var(--primary-color) !important;
+}
+
+.btn-primary {
+    background-color: var(--secondary-color) !important;
+    border-color: var(--secondary-color) !important;
+    color: var(--primary-color) !important;
+}
+
+.btn-secondary {
+    background-color: var(--primary-color) !important;
+    border-color: var(--primary-color) !important;
+    color: var(--white-color) !important;
+}
+
+.btn-outline-primary {
+    color: var(--secondary-color) !important;
+    border-color: var(--secondary-color) !important;
+}
+
+.btn-outline-primary:hover {
+    background-color: var(--secondary-color) !important;
+    color: var(--primary-color) !important;
+}
+
+.card {
+    background-color: var(--primary-color) !important;
+    border-color: var(--secondary-color) !important;
+}
+
+.card-header {
+    background-color: rgba(204, 204, 204, 0.1) !important;
+}
+
+.table {
+    color: white !important;
+}
+
+.badge.bg-primary {
+    background-color: var(--secondary-color) !important;
+    color: var(--primary-color) !important;
+}
+
+.text-primary {
+    color: var(--secondary-color) !important;
+}
+
+.navbar-dark {
+    background-color: var(--primary-color) !important;
+}
+
+.footer {
+    background-color: var(--primary-color) !important;
+    border-top: 1px solid var(--secondary-color);
+}
+
+a {
+    color: var(--secondary-color);
+}
+
+a:hover {
+    color: #a0a0a0;
+}
+
+.nav-link.active {
+    color: var(--secondary-color) !important;
+    font-weight: bold;
+}
+
+.form-control, .form-select {
+    background-color: rgba(255, 255, 255, 0.1) !important;
+    border-color: var(--secondary-color) !important;
+    color: white !important;
+}
+
+.form-control:focus, .form-select:focus {
+    box-shadow: 0 0 0 0.25rem rgba(204, 204, 204, 0.25) !important;
+}
+
 /* Add some padding to the body to account for the fixed navbar */
 body {
     padding-bottom: 70px;
