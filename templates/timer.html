@@ -42,7 +42,13 @@
                     <div class="row mb-3">
                         <div class="col-md-12">
                             <label for="item" class="form-label">Item/Task Description *</label>
-                            <input type="text" class="form-control" id="item" name="item" required>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="item" name="item" value="{{ item or '' }}" required>
+                                <button class="btn btn-outline-secondary" type="button" data-bs-toggle="modal" data-bs-target="#taskSelectorModal">
+                                    <i class="fas fa-tasks"></i> Select Task
+                                </button>
+                            </div>
+                            <input type="hidden" id="task_id" name="task_id" value="{{ task_id or '' }}">
                         </div>
                     </div>
                     
@@ -116,6 +122,80 @@
         </div>
     </div>
 </div>
+<!-- Task Selector Modal -->
+<div class="modal fade" id="taskSelectorModal" tabindex="-1" aria-labelledby="taskSelectorModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="taskSelectorModalLabel">Select a Task</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <input type="text" class="form-control" id="taskSearchInput" placeholder="Search tasks...">
+                </div>
+                <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
+                    <table class="table table-hover" id="taskTable">
+                        <thead>
+                            <tr>
+                                <th>Task</th>
+                                <th>Client</th>
+                                <th>Status</th>
+                                <th>Priority</th>
+                                <th>Action</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for task in tasks %}
+                            <tr>
+                                <td>
+                                    <strong>{{ task.title }}</strong>
+                                    {% if task.description %}
+                                    <br><small class="text-muted">{{ task.description|truncate(50) }}</small>
+                                    {% endif %}
+                                </td>
+                                <td>{{ task.client.name }}</td>
+                                <td>
+                                    {% if task.status == 'todo' %}
+                                        <span class="badge bg-secondary">To Do</span>
+                                    {% elif task.status == 'in_progress' %}
+                                        <span class="badge bg-primary">In Progress</span>
+                                    {% elif task.status == 'completed' %}
+                                        <span class="badge bg-success">Completed</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if task.priority == 0 %}
+                                        <span class="badge bg-info">Low</span>
+                                    {% elif task.priority == 1 %}
+                                        <span class="badge bg-warning">Medium</span>
+                                    {% elif task.priority == 2 %}
+                                        <span class="badge bg-danger">High</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    <button type="button" class="btn btn-sm btn-primary select-task" 
+                                            data-task-id="{{ task.id }}" 
+                                            data-task-title="{{ task.title }}"
+                                            data-client-id="{{ task.client_id }}">
+                                        Select
+                                    </button>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <a href="{{ url_for('add_task') }}" class="btn btn-outline-success">
+                    <i class="fas fa-plus"></i> Create New Task
+                </a>
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -124,6 +204,52 @@ document.addEventListener('DOMContentLoaded', function() {
     // Elements
     const clientSelect = document.getElementById('client_id');
     const hourlyRateInput = document.getElementById('hourly_rate');
+    const itemInput = document.getElementById('item');
+    const taskIdInput = document.getElementById('task_id');
+    const searchInput = document.getElementById('taskSearchInput');
+    
+    // Task selection
+    const selectTaskButtons = document.querySelectorAll('.select-task');
+    selectTaskButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const taskId = this.getAttribute('data-task-id');
+            const taskTitle = this.getAttribute('data-task-title');
+            const clientId = this.getAttribute('data-client-id');
+            
+            // Update form with selected task
+            taskIdInput.value = taskId;
+            itemInput.value = taskTitle;
+            clientSelect.value = clientId;
+            
+            // Trigger change event on client select to update the hourly rate
+            const event = new Event('change');
+            clientSelect.dispatchEvent(event);
+            
+            // Close the modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('taskSelectorModal'));
+            modal.hide();
+        });
+    });
+    
+    // Task search functionality
+    if (searchInput) {
+        searchInput.addEventListener('keyup', function() {
+            const searchTerm = this.value.toLowerCase();
+            const taskTable = document.getElementById('taskTable');
+            const rows = taskTable.querySelectorAll('tbody tr');
+            
+            rows.forEach(row => {
+                const titleCell = row.querySelector('td:first-child');
+                const title = titleCell.textContent.toLowerCase();
+                
+                if (title.includes(searchTerm)) {
+                    row.style.display = '';
+                } else {
+                    row.style.display = 'none';
+                }
+            });
+        });
+    }
     
     const timerDisplay = document.getElementById('timer-display');
     const startBtn = document.getElementById('start-timer');
