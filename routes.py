@@ -1,7 +1,7 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify, send_file, abort
 from sqlalchemy import func, desc
 from app import app, db
-from models import Client, TimeEntry, Invoice, CompanySettings
+from models import Client, TimeEntry, Invoice, CompanySettings, Task, TaskStatus
 from utils import generate_invoice_pdf, calculate_hours
 from datetime import datetime, date, timedelta
 import os
@@ -13,6 +13,134 @@ def utility_processor():
     def current_year():
         return datetime.now().year
     return dict(current_year=current_year)
+    
+# Task routes
+@app.route('/tasks')
+def tasks():
+    # Get filter parameters
+    client_id = request.args.get('client_id', type=int)
+    status = request.args.get('status')
+    priority = request.args.get('priority', type=int)
+    
+    # Base query
+    query = Task.query
+    
+    # Apply filters
+    if client_id:
+        query = query.filter_by(client_id=client_id)
+    if status:
+        query = query.filter_by(status=status)
+    if priority is not None:  # Check for None since priority can be 0 (low)
+        query = query.filter_by(priority=priority)
+    
+    # Order by priority (high to low) and due date (oldest first)
+    tasks = query.order_by(Task.priority.desc(), Task.due_date).all()
+    clients = Client.query.order_by(Client.name).all()
+    
+    return render_template('tasks.html', 
+                          tasks=tasks,
+                          clients=clients,
+                          selected_client_id=client_id,
+                          status=status,
+                          priority=priority)
+
+@app.route('/tasks/add', methods=['GET', 'POST'])
+def add_task():
+    if request.method == 'POST':
+        # Extract data from form
+        title = request.form.get('title')
+        client_id = request.form.get('client_id')
+        description = request.form.get('description')
+        status = request.form.get('status')
+        priority = int(request.form.get('priority'))
+        due_date_str = request.form.get('due_date')
+        estimated_hours = request.form.get('estimated_hours')
+        
+        # Parse due date if provided
+        due_date = None
+        if due_date_str:
+            due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
+        
+        # Parse estimated hours if provided
+        est_hours = None
+        if estimated_hours:
+            est_hours = float(estimated_hours)
+        
+        # Create new task
+        new_task = Task(
+            title=title,
+            client_id=int(client_id),
+            description=description,
+            status=status,
+            priority=priority,
+            due_date=due_date,
+            estimated_hours=est_hours
+        )
+        
+        db.session.add(new_task)
+        db.session.commit()
+        
+        flash('Task added successfully!', 'success')
+        return redirect(url_for('tasks'))
+    
+    # GET request - show the form
+    clients = Client.query.order_by(Client.name).all()
+    return render_template('add_task.html', clients=clients)
+
+@app.route('/tasks/<int:task_id>/edit', methods=['GET', 'POST'])
+def edit_task(task_id):
+    task = Task.query.get_or_404(task_id)
+    
+    if request.method == 'POST':
+        # Extract data from form
+        task.title = request.form.get('title')
+        task.client_id = int(request.form.get('client_id'))
+        task.description = request.form.get('description')
+        task.status = request.form.get('status')
+        task.priority = int(request.form.get('priority'))
+        
+        due_date_str = request.form.get('due_date')
+        if due_date_str:
+            task.due_date = datetime.strptime(due_date_str, '%Y-%m-%d').date()
+        else:
+            task.due_date = None
+        
+        estimated_hours = request.form.get('estimated_hours')
+        if estimated_hours:
+            task.estimated_hours = float(estimated_hours)
+        else:
+            task.estimated_hours = None
+        
+        db.session.commit()
+        
+        flash('Task updated successfully!', 'success')
+        return redirect(url_for('tasks'))
+    
+    # GET request - show the form with task data
+    clients = Client.query.order_by(Client.name).all()
+    return render_template('edit_task.html', task=task, clients=clients)
+
+@app.route('/tasks/<int:task_id>/delete', methods=['POST'])
+def delete_task(task_id):
+    task = Task.query.get_or_404(task_id)
+    
+    db.session.delete(task)
+    db.session.commit()
+    
+    flash('Task deleted successfully!', 'success')
+    return redirect(url_for('tasks'))
+
+@app.route('/timer/task/<int:task_id>')
+def timer_with_task(task_id):
+    task = Task.query.get_or_404(task_id)
+    clients = Client.query.all()
+    
+    # Pre-fill the timer form with task information
+    return render_template('timer.html', 
+                          clients=clients,
+                          selected_client_id=task.client_id,
+                          item=task.title,
+                          task_id=task.id)
 
 # Home route
 @app.route('/')

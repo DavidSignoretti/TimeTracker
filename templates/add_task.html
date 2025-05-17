@@ -1,0 +1,80 @@
+{% extends 'layout.html' %}
+
+{% block title %}Add Task - Time Tracker & Invoicing{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1><i class="fas fa-plus-circle"></i> Add New Task</h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="post" action="{{ url_for('add_task') }}">
+                    <div class="row mb-3">
+                        <div class="col-md-8">
+                            <label for="title" class="form-label">Task Title *</label>
+                            <input type="text" class="form-control" id="title" name="title" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="client_id" class="form-label">Client *</label>
+                            <select class="form-select" id="client_id" name="client_id" required>
+                                <option value="">Select a client</option>
+                                {% for client in clients %}
+                                    <option value="{{ client.id }}">{{ client.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label for="description" class="form-label">Description</label>
+                            <textarea class="form-control" id="description" name="description" rows="3"></textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="status" class="form-label">Status *</label>
+                            <select class="form-select" id="status" name="status" required>
+                                <option value="todo" selected>To Do</option>
+                                <option value="in_progress">In Progress</option>
+                                <option value="completed">Completed</option>
+                                <option value="archived">Archived</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="priority" class="form-label">Priority *</label>
+                            <select class="form-select" id="priority" name="priority" required>
+                                <option value="0" selected>Low</option>
+                                <option value="1">Medium</option>
+                                <option value="2">High</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="due_date" class="form-label">Due Date</label>
+                            <input type="date" class="form-control" id="due_date" name="due_date">
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="estimated_hours" class="form-label">Estimated Hours</label>
+                            <input type="number" min="0" step="0.25" class="form-control" id="estimated_hours" name="estimated_hours">
+                        </div>
+                    </div>
+                    
+                    <div class="text-end">
+                        <a href="{{ url_for('tasks') }}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Save Task</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

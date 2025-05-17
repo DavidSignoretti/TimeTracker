@@ -1,0 +1,185 @@
+{% extends 'layout.html' %}
+
+{% block title %}Tasks - Time Tracker & Invoicing{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h1><i class="fas fa-tasks"></i> Tasks</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <a href="{{ url_for('add_task') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Add New Task
+        </a>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Filter Tasks</h5>
+            </div>
+            <div class="card-body">
+                <form id="filterForm" class="row g-3" method="get">
+                    <div class="col-md-3">
+                        <label for="clientFilter" class="form-label">Client</label>
+                        <select class="form-select" id="clientFilter" name="client_id">
+                            <option value="">All Clients</option>
+                            {% for client in clients %}
+                                <option value="{{ client.id }}" {% if selected_client_id == client.id %}selected{% endif %}>{{ client.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="statusFilter" class="form-label">Status</label>
+                        <select class="form-select" id="statusFilter" name="status">
+                            <option value="">All Statuses</option>
+                            <option value="todo" {% if status == 'todo' %}selected{% endif %}>To Do</option>
+                            <option value="in_progress" {% if status == 'in_progress' %}selected{% endif %}>In Progress</option>
+                            <option value="completed" {% if status == 'completed' %}selected{% endif %}>Completed</option>
+                            <option value="archived" {% if status == 'archived' %}selected{% endif %}>Archived</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label for="priorityFilter" class="form-label">Priority</label>
+                        <select class="form-select" id="priorityFilter" name="priority">
+                            <option value="">All Priorities</option>
+                            <option value="0" {% if priority == 0 %}selected{% endif %}>Low</option>
+                            <option value="1" {% if priority == 1 %}selected{% endif %}>Medium</option>
+                            <option value="2" {% if priority == 2 %}selected{% endif %}>High</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3 d-flex align-items-end">
+                        <button type="submit" class="btn btn-primary w-100">Apply Filters</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% if tasks %}
+    <div class="row">
+        <div class="col-md-12">
+            <div class="table-responsive">
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Task</th>
+                            <th>Client</th>
+                            <th>Status</th>
+                            <th>Priority</th>
+                            <th>Due Date</th>
+                            <th>Est. Hours</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for task in tasks %}
+                        <tr>
+                            <td>
+                                <strong>{{ task.title }}</strong>
+                                {% if task.description %}
+                                <br><small class="text-muted">{{ task.description|truncate(50) }}</small>
+                                {% endif %}
+                            </td>
+                            <td>{{ task.client.name }}</td>
+                            <td>
+                                {% if task.status == 'todo' %}
+                                    <span class="badge bg-secondary">To Do</span>
+                                {% elif task.status == 'in_progress' %}
+                                    <span class="badge bg-primary">In Progress</span>
+                                {% elif task.status == 'completed' %}
+                                    <span class="badge bg-success">Completed</span>
+                                {% elif task.status == 'archived' %}
+                                    <span class="badge bg-dark">Archived</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if task.priority == 0 %}
+                                    <span class="badge bg-info">Low</span>
+                                {% elif task.priority == 1 %}
+                                    <span class="badge bg-warning">Medium</span>
+                                {% elif task.priority == 2 %}
+                                    <span class="badge bg-danger">High</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if task.due_date %}
+                                    {{ task.due_date.strftime('%Y-%m-%d') }}
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if task.estimated_hours %}
+                                    {{ task.estimated_hours }} hrs
+                                {% else %}
+                                    -
+                                {% endif %}
+                            </td>
+                            <td>
+                                <div class="btn-group" role="group">
+                                    <a href="{{ url_for('edit_task', task_id=task.id) }}" class="btn btn-sm btn-outline-primary">
+                                        <i class="fas fa-edit"></i>
+                                    </a>
+                                    <a href="{{ url_for('timer_with_task', task_id=task.id) }}" class="btn btn-sm btn-outline-success">
+                                        <i class="fas fa-stopwatch"></i>
+                                    </a>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteTaskModal{{ task.id }}">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                
+                                <!-- Delete Confirmation Modal -->
+                                <div class="modal fade" id="deleteTaskModal{{ task.id }}" tabindex="-1" aria-hidden="true">
+                                    <div class="modal-dialog">
+                                        <div class="modal-content">
+                                            <div class="modal-header">
+                                                <h5 class="modal-title">Confirm Delete</h5>
+                                                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                            </div>
+                                            <div class="modal-body">
+                                                Are you sure you want to delete task <strong>{{ task.title }}</strong>?
+                                            </div>
+                                            <div class="modal-footer">
+                                                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                                <form action="{{ url_for('delete_task', task_id=task.id) }}" method="post">
+                                                    <button type="submit" class="btn btn-danger">Delete</button>
+                                                </form>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+{% else %}
+    <div class="alert alert-info">
+        No tasks found. <a href="{{ url_for('add_task') }}">Add your first task</a> to get started.
+    </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Clear filters button
+    const clearFiltersBtn = document.getElementById('clearFilters');
+    if (clearFiltersBtn) {
+        clearFiltersBtn.addEventListener('click', function() {
+            document.getElementById('clientFilter').value = '';
+            document.getElementById('statusFilter').value = '';
+            document.getElementById('priorityFilter').value = '';
+            document.getElementById('filterForm').submit();
+        });
+    }
+});
+</script>
+{% endblock %}

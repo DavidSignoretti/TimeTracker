@@ -1,5 +1,12 @@
 from app import db
 from datetime import datetime
+from enum import Enum
+
+class TaskStatus(Enum):
+    TODO = "todo"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    ARCHIVED = "archived"
 
 class Client(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -57,6 +64,25 @@ class Invoice(db.Model):
 
     def __repr__(self):
         return f'<Invoice {self.invoice_number} for {self.client_id}>'
+
+
+class Task(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    description = db.Column(db.Text, nullable=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    status = db.Column(db.String(20), nullable=False, default=TaskStatus.TODO.value)
+    priority = db.Column(db.Integer, nullable=False, default=0)  # 0=low, 1=medium, 2=high
+    due_date = db.Column(db.Date, nullable=True)
+    estimated_hours = db.Column(db.Float, nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Add relationship to client
+    client = db.relationship('Client', backref=db.backref('tasks', lazy=True, cascade="all, delete-orphan"))
+    
+    def __repr__(self):
+        return f'<Task {self.id}: {self.title}>'
 
 
 class CompanySettings(db.Model):
