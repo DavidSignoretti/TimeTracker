@@ -1,0 +1,210 @@
+{% extends 'layout.html' %}
+
+{% block title %}Create Invoice - Time Tracker & Invoicing{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1><i class="fas fa-file-invoice"></i> Create New Invoice</h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="post" action="{{ url_for('create_invoice') }}" id="invoiceForm">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="client_id" class="form-label">Client *</label>
+                            <select class="form-select" id="client_id" name="client_id" required>
+                                <option value="">Select a client</option>
+                                {% for client in clients %}
+                                    <option value="{{ client.id }}">{{ client.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="date_issued" class="form-label">Issue Date *</label>
+                            <input type="date" class="form-control" id="date_issued" name="date_issued" value="{{ now().strftime('%Y-%m-%d') }}" required>
+                        </div>
+                    </div>
+                    
+                    <div class="card mt-4 mb-4">
+                        <div class="card-header">
+                            <h5 class="mb-0">Time Entries</h5>
+                        </div>
+                        <div class="card-body">
+                            <div id="entriesContainer">
+                                <div class="alert alert-info" id="noEntriesMessage">
+                                    Please select a client to view unbilled time entries.
+                                </div>
+                                <div id="entriesTableContainer" class="d-none">
+                                    <div class="form-check mb-3">
+                                        <input class="form-check-input" type="checkbox" id="selectAllEntries">
+                                        <label class="form-check-label" for="selectAllEntries">
+                                            Select All Entries
+                                        </label>
+                                    </div>
+                                    <div class="table-responsive">
+                                        <table class="table table-hover" id="entriesTable">
+                                            <thead>
+                                                <tr>
+                                                    <th width="5%"></th>
+                                                    <th>Date</th>
+                                                    <th>Item</th>
+                                                    <th>Location</th>
+                                                    <th>Hours</th>
+                                                    <th>Rate</th>
+                                                    <th>Amount</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="entriesTableBody">
+                                                <!-- Will be populated with AJAX -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label for="notes" class="form-label">Notes</label>
+                            <textarea class="form-control" id="notes" name="notes" rows="3"></textarea>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="alert alert-warning" id="noEntriesSelectedWarning" style="display: none;">
+                                Please select at least one time entry to create an invoice.
+                            </div>
+                        </div>
+                        <div class="col-md-6 text-end">
+                            <a href="{{ url_for('invoices') }}" class="btn btn-secondary">Cancel</a>
+                            <button type="submit" class="btn btn-primary" id="createInvoiceBtn">Create Invoice</button>
+                        </div>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const clientSelect = document.getElementById('client_id');
+    const entriesTableContainer = document.getElementById('entriesTableContainer');
+    const entriesTableBody = document.getElementById('entriesTableBody');
+    const noEntriesMessage = document.getElementById('noEntriesMessage');
+    const selectAllCheckbox = document.getElementById('selectAllEntries');
+    const createInvoiceBtn = document.getElementById('createInvoiceBtn');
+    const noEntriesSelectedWarning = document.getElementById('noEntriesSelectedWarning');
+    const invoiceForm = document.getElementById('invoiceForm');
+    
+    // Load time entries when client changes
+    clientSelect.addEventListener('change', function() {
+        const clientId = this.value;
+        
+        if (!clientId) {
+            entriesTableContainer.classList.add('d-none');
+            noEntriesMessage.classList.remove('d-none');
+            noEntriesMessage.textContent = 'Please select a client to view unbilled time entries.';
+            return;
+        }
+        
+        // Show loading message
+        noEntriesMessage.textContent = 'Loading time entries...';
+        noEntriesMessage.classList.remove('d-none');
+        entriesTableContainer.classList.add('d-none');
+        
+        // Fetch unbilled entries for this client
+        fetch(`/get_unbilled_entries/${clientId}`)
+            .then(response => response.json())
+            .then(data => {
+                // Clear existing entries
+                entriesTableBody.innerHTML = '';
+                
+                if (data.length === 0) {
+                    noEntriesMessage.textContent = 'No unbilled time entries found for this client.';
+                    noEntriesMessage.classList.remove('d-none');
+                    entriesTableContainer.classList.add('d-none');
+                    return;
+                }
+                
+                // Populate table with entries
+                data.forEach(entry => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td>
+                            <input class="form-check-input entry-checkbox" type="checkbox" name="time_entries" value="${entry.id}">
+                        </td>
+                        <td>${entry.date}</td>
+                        <td>${entry.item}</td>
+                        <td>${entry.location}</td>
+                        <td>${entry.hours}</td>
+                        <td>${entry.rate}</td>
+                        <td>${entry.amount}</td>
+                    `;
+                    entriesTableBody.appendChild(row);
+                });
+                
+                // Show the table
+                noEntriesMessage.classList.add('d-none');
+                entriesTableContainer.classList.remove('d-none');
+                
+                // Reset select all checkbox
+                selectAllCheckbox.checked = false;
+                
+                // Attach event listeners to checkboxes
+                attachCheckboxListeners();
+            })
+            .catch(error => {
+                console.error('Error fetching time entries:', error);
+                noEntriesMessage.textContent = 'Error loading time entries. Please try again.';
+                noEntriesMessage.classList.remove('d-none');
+                entriesTableContainer.classList.add('d-none');
+            });
+    });
+    
+    // Select all entries
+    selectAllCheckbox.addEventListener('change', function() {
+        const checkboxes = document.querySelectorAll('.entry-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.checked = this.checked;
+        });
+    });
+    
+    // Form validation before submit
+    invoiceForm.addEventListener('submit', function(event) {
+        const selectedEntries = document.querySelectorAll('.entry-checkbox:checked');
+        
+        if (selectedEntries.length === 0) {
+            event.preventDefault();
+            noEntriesSelectedWarning.style.display = 'block';
+            window.scrollTo(0, noEntriesSelectedWarning.offsetTop - 100);
+        }
+    });
+    
+    function attachCheckboxListeners() {
+        // Update "select all" checkbox when individual checkboxes change
+        const checkboxes = document.querySelectorAll('.entry-checkbox');
+        checkboxes.forEach(checkbox => {
+            checkbox.addEventListener('change', function() {
+                const allChecked = document.querySelectorAll('.entry-checkbox:checked').length === checkboxes.length;
+                selectAllCheckbox.checked = allChecked;
+                
+                // Hide warning if any checkbox is checked
+                if (document.querySelectorAll('.entry-checkbox:checked').length > 0) {
+                    noEntriesSelectedWarning.style.display = 'none';
+                }
+            });
+        });
+    }
+});
+</script>
+{% endblock %}

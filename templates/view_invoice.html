@@ -1,0 +1,218 @@
+{% extends 'layout.html' %}
+
+{% block title %}Invoice {{ invoice.invoice_number }} - Time Tracker & Invoicing{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h1><i class="fas fa-file-invoice"></i> Invoice #{{ invoice.invoice_number }}</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('download_invoice', invoice_id=invoice.id) }}" class="btn btn-primary">
+                <i class="fas fa-download"></i> Download PDF
+            </a>
+            <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                <i class="fas fa-cog"></i> Actions
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li>
+                    <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#statusModal">
+                        <i class="fas fa-edit"></i> Change Status
+                    </button>
+                </li>
+                <li>
+                    <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#deleteInvoiceModal">
+                        <i class="fas fa-trash"></i> Delete Invoice
+                    </button>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <h3>{{ company.company_name }}</h3>
+                {% if company.address %}
+                    <p>{{ company.address }}</p>
+                {% endif %}
+                {% if company.city and company.province and company.postal_code %}
+                    <p>{{ company.city }}, {{ company.province }} {{ company.postal_code }}</p>
+                {% endif %}
+                {% if company.phone %}
+                    <p>Phone: {{ company.phone }}</p>
+                {% endif %}
+                {% if company.email %}
+                    <p>Email: {{ company.email }}</p>
+                {% endif %}
+                {% if company.tax_number %}
+                    <p>HST #: {{ company.tax_number }}</p>
+                {% endif %}
+            </div>
+            <div class="col-md-6 text-md-end">
+                <h2 class="text-primary">INVOICE</h2>
+                <p><strong>Invoice #:</strong> {{ invoice.invoice_number }}</p>
+                <p><strong>Date Issued:</strong> {{ invoice.date_issued.strftime('%Y-%m-%d') }}</p>
+                <p><strong>Date Due:</strong> {{ invoice.date_due.strftime('%Y-%m-%d') }}</p>
+                <p><strong>Status:</strong> 
+                    {% if invoice.status == 'draft' %}
+                        <span class="badge bg-secondary">Draft</span>
+                    {% elif invoice.status == 'sent' %}
+                        <span class="badge bg-primary">Sent</span>
+                    {% elif invoice.status == 'paid' %}
+                        <span class="badge bg-success">Paid</span>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h4>Bill To</h4>
+    </div>
+    <div class="card-body">
+        <h4>{{ invoice.client.name }}</h4>
+        {% if invoice.client.contact_person %}
+            <p>Attn: {{ invoice.client.contact_person }}</p>
+        {% endif %}
+        {% if invoice.client.address %}
+            <p>{{ invoice.client.address }}</p>
+        {% endif %}
+        {% if invoice.client.city and invoice.client.province and invoice.client.postal_code %}
+            <p>{{ invoice.client.city }}, {{ invoice.client.province }} {{ invoice.client.postal_code }}</p>
+        {% endif %}
+        {% if invoice.client.phone %}
+            <p>Phone: {{ invoice.client.phone }}</p>
+        {% endif %}
+        {% if invoice.client.email %}
+            <p>Email: {{ invoice.client.email }}</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h4>Services</h4>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th>Location</th>
+                        <th>Hours</th>
+                        <th>Rate</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in invoice.time_entries %}
+                    <tr>
+                        <td>{{ entry.date.strftime('%Y-%m-%d') }}</td>
+                        <td>{{ entry.item }}</td>
+                        <td>{{ entry.location or '' }}</td>
+                        <td>{{ entry.total_hours }}</td>
+                        <td>${{ entry.hourly_rate|round(2) }}</td>
+                        <td>${{ (entry.total_hours * entry.hourly_rate)|round(2) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="4"></td>
+                        <td class="text-end"><strong>Subtotal:</strong></td>
+                        <td>${{ invoice.subtotal|round(2) }}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="4"></td>
+                        <td class="text-end"><strong>HST ({{ (invoice.hst_rate * 100)|int }}%):</strong></td>
+                        <td>${{ invoice.hst_amount|round(2) }}</td>
+                    </tr>
+                    <tr class="table-active">
+                        <td colspan="4"></td>
+                        <td class="text-end"><strong>Total:</strong></td>
+                        <td><strong>${{ invoice.total|round(2) }}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% if invoice.notes %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h4>Notes</h4>
+    </div>
+    <div class="card-body">
+        <p>{{ invoice.notes }}</p>
+    </div>
+</div>
+{% endif %}
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h4>Payment Terms</h4>
+    </div>
+    <div class="card-body">
+        <p>Payment is due within 30 days of invoice date.</p>
+    </div>
+</div>
+
+<!-- Status Change Modal -->
+<div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Change Invoice Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form action="{{ url_for('update_invoice_status', invoice_id=invoice.id) }}" method="post">
+                    <div class="mb-3">
+                        <label for="status" class="form-label">Status</label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="draft" {% if invoice.status == 'draft' %}selected{% endif %}>Draft</option>
+                            <option value="sent" {% if invoice.status == 'sent' %}selected{% endif %}>Sent</option>
+                            <option value="paid" {% if invoice.status == 'paid' %}selected{% endif %}>Paid</option>
+                        </select>
+                    </div>
+                    <div class="text-end">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Update Status</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteInvoiceModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete invoice <strong>{{ invoice.invoice_number }}</strong>?
+                This will unlink all time entries from this invoice.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form action="{{ url_for('delete_invoice', invoice_id=invoice.id) }}" method="post">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,149 @@
+{% extends 'layout.html' %}
+
+{% block title %}Add Time Entry - Time Tracker & Invoicing{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1><i class="fas fa-plus-circle"></i> Add Time Entry</h1>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="post" action="{{ url_for('add_time_entry') }}">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="client_id" class="form-label">Client *</label>
+                            <select class="form-select" id="client_id" name="client_id" required>
+                                <option value="">Select a client</option>
+                                {% for client in clients %}
+                                    <option value="{{ client.id }}" data-rate="{{ client.hourly_rate }}">{{ client.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="hourly_rate" class="form-label">Hourly Rate ($)</label>
+                            <input type="number" min="0" step="0.01" class="form-control" id="hourly_rate" readonly>
+                            <small class="form-text text-muted">Based on client's default rate</small>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="date" class="form-label">Date *</label>
+                            <input type="date" class="form-control" id="date" name="date" value="{{ today.strftime('%Y-%m-%d') }}" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="time_in" class="form-label">Time In *</label>
+                            <input type="time" class="form-control" id="time_in" name="time_in" required>
+                        </div>
+                        <div class="col-md-4">
+                            <label for="time_out" class="form-label">Time Out *</label>
+                            <input type="time" class="form-control" id="time_out" name="time_out" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label for="item" class="form-label">Item/Task Description *</label>
+                            <input type="text" class="form-control" id="item" name="item" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="location" class="form-label">Location</label>
+                            <input type="text" class="form-control" id="location" name="location">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="total_hours" class="form-label">Total Hours</label>
+                            <input type="text" class="form-control" id="total_hours" readonly>
+                            <small class="form-text text-muted">Will be calculated automatically</small>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="total_amount" class="form-label">Total Amount</label>
+                            <input type="text" class="form-control" id="total_amount" readonly>
+                            <small class="form-text text-muted">Will be calculated automatically</small>
+                        </div>
+                    </div>
+                    
+                    <div class="text-end">
+                        <a href="{{ url_for('time_entries') }}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Save Time Entry</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const clientSelect = document.getElementById('client_id');
+    const hourlyRateInput = document.getElementById('hourly_rate');
+    const timeInInput = document.getElementById('time_in');
+    const timeOutInput = document.getElementById('time_out');
+    const totalHoursInput = document.getElementById('total_hours');
+    const totalAmountInput = document.getElementById('total_amount');
+    
+    // Update hourly rate when client changes
+    clientSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        const rate = selectedOption.getAttribute('data-rate');
+        hourlyRateInput.value = rate || '';
+        calculateTotals();
+    });
+    
+    // Calculate hours and amount when time in/out changes
+    timeInInput.addEventListener('change', calculateTotals);
+    timeOutInput.addEventListener('change', calculateTotals);
+    
+    function calculateTotals() {
+        if (!timeInInput.value || !timeOutInput.value) {
+            totalHoursInput.value = '';
+            totalAmountInput.value = '';
+            return;
+        }
+        
+        // Parse times
+        const timeIn = timeInInput.value.split(':');
+        const timeOut = timeOutInput.value.split(':');
+        
+        let hours = parseInt(timeOut[0]) - parseInt(timeIn[0]);
+        let minutes = parseInt(timeOut[1]) - parseInt(timeIn[1]);
+        
+        // Handle overnight shifts
+        if (hours < 0) {
+            hours += 24;
+        }
+        
+        // Adjust for minutes
+        if (minutes < 0) {
+            hours -= 1;
+            minutes += 60;
+        }
+        
+        // Calculate total hours with decimal
+        const totalHours = hours + (minutes / 60);
+        totalHoursInput.value = totalHours.toFixed(2);
+        
+        // Calculate amount if hourly rate is set
+        if (hourlyRateInput.value) {
+            const rate = parseFloat(hourlyRateInput.value);
+            const amount = totalHours * rate;
+            totalAmountInput.value = '$' + amount.toFixed(2);
+        } else {
+            totalAmountInput.value = '';
+        }
+    }
+});
+</script>
+{% endblock %}

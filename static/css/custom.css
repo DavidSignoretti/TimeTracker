@@ -1,0 +1,179 @@
+/**
+ * Time Tracker & Invoicing Application
+ * Custom CSS styles - using minimal overrides as we're using Bootstrap
+ */
+
+/* Add some padding to the body to account for the fixed navbar */
+body {
+    padding-bottom: 70px;
+}
+
+/* Custom avatar styles for clients without images */
+.client-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: var(--bs-primary);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: bold;
+}
+
+/* Improve spacing for card groups */
+.card {
+    margin-bottom: 1.5rem;
+}
+
+/* Custom badge styles */
+.badge.bg-sent {
+    background-color: var(--bs-info);
+}
+
+.badge.bg-paid {
+    background-color: var(--bs-success);
+}
+
+.badge.bg-draft {
+    background-color: var(--bs-secondary);
+}
+
+/* Make sure tables are readable in dark mode */
+.table {
+    --bs-table-color: inherit;
+}
+
+/* Status indicators */
+.status-indicator {
+    width: 10px;
+    height: 10px;
+    display: inline-block;
+    border-radius: 50%;
+    margin-right: 5px;
+}
+
+.status-paid {
+    background-color: var(--bs-success);
+}
+
+.status-sent {
+    background-color: var(--bs-primary);
+}
+
+.status-draft {
+    background-color: var(--bs-secondary);
+}
+
+/* Improve invoice view for printing */
+@media print {
+    .navbar, .footer, .no-print, .btn, form {
+        display: none !important;
+    }
+    
+    .card {
+        border: none !important;
+    }
+    
+    .card-header {
+        background-color: white !important;
+        color: black !important;
+    }
+    
+    body {
+        background-color: white !important;
+        color: black !important;
+    }
+    
+    .container {
+        max-width: 100% !important;
+        width: 100% !important;
+    }
+    
+    .table {
+        color: black !important;
+    }
+}
+
+/* Dashboard card enhancements */
+.dashboard-card {
+    transition: transform 0.2s ease;
+}
+
+.dashboard-card:hover {
+    transform: translateY(-5px);
+}
+
+.dashboard-card .card-title {
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+
+.dashboard-card .display-4 {
+    font-weight: 600;
+}
+
+/* Make chart containers responsive */
+.chart-container {
+    position: relative;
+    height: 300px;
+    width: 100%;
+}
+
+/* Custom form styling */
+.form-control:focus, .form-select:focus {
+    box-shadow: 0 0 0 0.25rem rgba(var(--bs-primary-rgb), 0.25);
+}
+
+/* Improve table responsiveness */
+.table-responsive {
+    margin-bottom: 1rem;
+}
+
+/* Additional styling for invoice line items */
+.invoice-items .table th {
+    border-top: none;
+}
+
+.invoice-total {
+    font-size: 1.2rem;
+    font-weight: 600;
+}
+
+/* Ensure consistent button spacing */
+.btn-group .btn {
+    margin-right: 0;
+}
+
+.btn + .btn {
+    margin-left: 0.5rem;
+}
+
+/* Improve time entry form layout */
+.time-entry-form .time-inputs {
+    display: flex;
+    gap: 1rem;
+}
+
+/* Make sure flash messages stand out */
+.alert {
+    margin-bottom: 1.5rem;
+}
+
+/* Make sure footer sticks to bottom of short pages */
+html, body {
+    min-height: 100vh;
+}
+
+body {
+    display: flex;
+    flex-direction: column;
+}
+
+.container {
+    flex: 1;
+}
+
+.footer {
+    margin-top: auto;
+}

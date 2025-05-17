@@ -1,0 +1,202 @@
+{% extends 'layout.html' %}
+
+{% block title %}Dashboard - Time Tracker & Invoicing{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1 class="mb-4"><i class="fas fa-tachometer-alt"></i> Dashboard</h1>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-body text-center">
+                <h5 class="card-title">Clients</h5>
+                <h2 class="display-4">{{ total_clients }}</h2>
+                <a href="{{ url_for('clients') }}" class="btn btn-primary">Manage Clients</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-body text-center">
+                <h5 class="card-title">Unbilled Hours</h5>
+                <h2 class="display-4">{{ total_unbilled_hours|round(1) }}</h2>
+                <a href="{{ url_for('time_entries') }}" class="btn btn-primary">View Time Entries</a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card mb-4">
+            <div class="card-body text-center">
+                <h5 class="card-title">Unbilled Amount</h5>
+                <h2 class="display-4">${{ total_unbilled_amount|round(2) }}</h2>
+                <a href="{{ url_for('create_invoice') }}" class="btn btn-primary">Create Invoice</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-5">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-clock"></i> Recent Time Entries</h5>
+                <a href="{{ url_for('time_entries') }}" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="card-body">
+                {% if recent_time_entries %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Date</th>
+                                    <th>Client</th>
+                                    <th>Task</th>
+                                    <th>Hours</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for entry in recent_time_entries %}
+                                <tr>
+                                    <td>{{ entry.date.strftime('%Y-%m-%d') }}</td>
+                                    <td>{{ entry.client.name }}</td>
+                                    <td>{{ entry.item }}</td>
+                                    <td>{{ entry.total_hours }}</td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">No time entries found.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="fas fa-file-invoice-dollar"></i> Recent Invoices</h5>
+                <a href="{{ url_for('invoices') }}" class="btn btn-sm btn-outline-primary">View All</a>
+            </div>
+            <div class="card-body">
+                {% if recent_invoices %}
+                    <div class="table-responsive">
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Number</th>
+                                    <th>Client</th>
+                                    <th>Date</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for invoice in recent_invoices %}
+                                <tr>
+                                    <td>
+                                        <a href="{{ url_for('view_invoice', invoice_id=invoice.id) }}">
+                                            {{ invoice.invoice_number }}
+                                        </a>
+                                    </td>
+                                    <td>{{ invoice.client.name }}</td>
+                                    <td>{{ invoice.date_issued.strftime('%Y-%m-%d') }}</td>
+                                    <td>${{ invoice.total|round(2) }}</td>
+                                    <td>
+                                        {% if invoice.status == 'draft' %}
+                                            <span class="badge bg-secondary">Draft</span>
+                                        {% elif invoice.status == 'sent' %}
+                                            <span class="badge bg-primary">Sent</span>
+                                        {% elif invoice.status == 'paid' %}
+                                            <span class="badge bg-success">Paid</span>
+                                        {% endif %}
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="alert alert-info">No invoices found.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="fas fa-chart-bar"></i> Hours by Client (Last 30 Days)</h5>
+            </div>
+            <div class="card-body">
+                <canvas id="clientHoursChart" height="300"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Sample data for the chart
+    // In a real implementation, this would be populated from the server
+    
+    // If we had real data, we'd use it from the server via JSON
+    // For now, we'll create some fake data based on clients we know exist
+    const clientNames = [];
+    const clientHours = [];
+    
+    {% for entry in recent_time_entries %}
+    if (!clientNames.includes('{{ entry.client.name }}')) {
+        clientNames.push('{{ entry.client.name }}');
+        clientHours.push({{ entry.total_hours }});
+    } else {
+        const index = clientNames.indexOf('{{ entry.client.name }}');
+        clientHours[index] += {{ entry.total_hours }};
+    }
+    {% endfor %}
+    
+    if (clientNames.length > 0) {
+        const ctx = document.getElementById('clientHoursChart').getContext('2d');
+        new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: clientNames,
+                datasets: [{
+                    label: 'Hours Worked',
+                    data: clientHours,
+                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        title: {
+                            display: true,
+                            text: 'Hours'
+                        }
+                    },
+                    x: {
+                        title: {
+                            display: true,
+                            text: 'Client'
+                        }
+                    }
+                }
+            }
+        });
+    }
+});
+</script>
+{% endblock %}

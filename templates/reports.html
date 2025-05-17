@@ -1,0 +1,276 @@
+{% extends 'layout.html' %}
+
+{% block title %}Reports - Time Tracker & Invoicing{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1><i class="fas fa-chart-bar"></i> Reports</h1>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header">
+                <h5 class="mb-0">Filter Options</h5>
+            </div>
+            <div class="card-body">
+                <form id="reportForm" method="get" class="row g-3">
+                    <div class="col-md-4">
+                        <label for="client_id" class="form-label">Client</label>
+                        <select class="form-select" id="client_id" name="client_id">
+                            <option value="">All Clients</option>
+                            {% for client in clients %}
+                                <option value="{{ client.id }}" {% if selected_client_id == client.id %}selected{% endif %}>{{ client.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label for="start_date" class="form-label">Start Date</label>
+                        <input type="date" class="form-control" id="start_date" name="start_date" value="{{ start_date.strftime('%Y-%m-%d') }}">
+                    </div>
+                    <div class="col-md-4">
+                        <label for="end_date" class="form-label">End Date</label>
+                        <input type="date" class="form-control" id="end_date" name="end_date" value="{{ end_date.strftime('%Y-%m-%d') }}">
+                    </div>
+                    <div class="col-12 text-end">
+                        <button type="button" class="btn btn-secondary" id="thisMonth">This Month</button>
+                        <button type="button" class="btn btn-secondary" id="lastMonth">Last Month</button>
+                        <button type="button" class="btn btn-secondary" id="thisYear">This Year</button>
+                        <button type="submit" class="btn btn-primary">Generate Report</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Report Results</h5>
+                <span>
+                    {{ start_date.strftime('%Y-%m-%d') }} to {{ end_date.strftime('%Y-%m-%d') }}
+                    {% if selected_client_id %}
+                        | {{ clients|selectattr('id', 'eq', selected_client_id)|map(attribute='name')|first }}
+                    {% else %}
+                        | All Clients
+                    {% endif %}
+                </span>
+            </div>
+            <div class="card-body">
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Total Hours</h5>
+                                <h3 class="display-5">{{ total_hours|round(2) }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="card bg-light">
+                            <div class="card-body text-center">
+                                <h5 class="card-title">Total Amount</h5>
+                                <h3 class="display-5">${{ total_amount|round(2) }}</h3>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                {% if client_summary %}
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <h5>Summary by Client</h5>
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Client</th>
+                                        <th>Hours</th>
+                                        <th>Amount</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for client_id, data in client_summary.items() %}
+                                    <tr>
+                                        <td>{{ data.name }}</td>
+                                        <td>{{ data.hours|round(2) }}</td>
+                                        <td>${{ data.amount|round(2) }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row mb-4">
+                    <div class="col-md-12">
+                        <canvas id="clientChart" height="300"></canvas>
+                    </div>
+                </div>
+                {% endif %}
+                
+                {% if entries %}
+                <div class="row">
+                    <div class="col-md-12">
+                        <h5>Detailed Time Entries</h5>
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Client</th>
+                                        <th>Item</th>
+                                        <th>Location</th>
+                                        <th>Hours</th>
+                                        <th>Rate</th>
+                                        <th>Amount</th>
+                                        <th>Invoice</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for entry in entries %}
+                                    <tr>
+                                        <td>{{ entry.date.strftime('%Y-%m-%d') }}</td>
+                                        <td>{{ entry.client.name }}</td>
+                                        <td>{{ entry.item }}</td>
+                                        <td>{{ entry.location or '' }}</td>
+                                        <td>{{ entry.total_hours }}</td>
+                                        <td>${{ entry.hourly_rate|round(2) }}</td>
+                                        <td>${{ (entry.total_hours * entry.hourly_rate)|round(2) }}</td>
+                                        <td>
+                                            {% if entry.invoice_id %}
+                                                <a href="{{ url_for('view_invoice', invoice_id=entry.invoice_id) }}">
+                                                    {{ entry.invoice.invoice_number }}
+                                                </a>
+                                            {% else %}
+                                                <span class="badge bg-warning">Not Invoiced</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                {% else %}
+                <div class="alert alert-info">
+                    No time entries found for the selected criteria.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Date quick select buttons
+    document.getElementById('thisMonth').addEventListener('click', function() {
+        const now = new Date();
+        const firstDay = new Date(now.getFullYear(), now.getMonth(), 1);
+        const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+        
+        document.getElementById('start_date').value = formatDate(firstDay);
+        document.getElementById('end_date').value = formatDate(lastDay);
+    });
+    
+    document.getElementById('lastMonth').addEventListener('click', function() {
+        const now = new Date();
+        const firstDay = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+        const lastDay = new Date(now.getFullYear(), now.getMonth(), 0);
+        
+        document.getElementById('start_date').value = formatDate(firstDay);
+        document.getElementById('end_date').value = formatDate(lastDay);
+    });
+    
+    document.getElementById('thisYear').addEventListener('click', function() {
+        const now = new Date();
+        const firstDay = new Date(now.getFullYear(), 0, 1);
+        const lastDay = new Date(now.getFullYear(), 11, 31);
+        
+        document.getElementById('start_date').value = formatDate(firstDay);
+        document.getElementById('end_date').value = formatDate(lastDay);
+    });
+    
+    function formatDate(date) {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    }
+    
+    // Chart
+    {% if client_summary %}
+    const ctx = document.getElementById('clientChart').getContext('2d');
+    
+    // Extract data from client summary
+    const clients = [];
+    const hours = [];
+    const amounts = [];
+    
+    {% for client_id, data in client_summary.items() %}
+        clients.push('{{ data.name }}');
+        hours.push({{ data.hours }});
+        amounts.push({{ data.amount }});
+    {% endfor %}
+    
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: clients,
+            datasets: [
+                {
+                    label: 'Hours',
+                    data: hours,
+                    backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                    borderColor: 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Amount ($)',
+                    data: amounts,
+                    backgroundColor: 'rgba(153, 102, 255, 0.6)',
+                    borderColor: 'rgba(153, 102, 255, 1)',
+                    borderWidth: 1,
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    position: 'left',
+                    title: {
+                        display: true,
+                        text: 'Hours'
+                    }
+                },
+                y1: {
+                    beginAtZero: true,
+                    position: 'right',
+                    grid: {
+                        drawOnChartArea: false
+                    },
+                    title: {
+                        display: true,
+                        text: 'Amount ($)'
+                    }
+                }
+            }
+        }
+    });
+    {% endif %}
+});
+</script>
+{% endblock %}

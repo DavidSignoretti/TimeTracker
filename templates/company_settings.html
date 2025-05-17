@@ -1,0 +1,98 @@
+{% extends 'layout.html' %}
+
+{% block title %}Company Settings - Time Tracker & Invoicing{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h1><i class="fas fa-building"></i> Company Settings</h1>
+        <p class="text-muted">This information will be used on your invoices.</p>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-body">
+                <form method="post" action="{{ url_for('company_settings') }}">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="company_name" class="form-label">Company Name *</label>
+                            <input type="text" class="form-control" id="company_name" name="company_name" value="{{ company.company_name }}" required>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="tax_number" class="form-label">Tax Number (HST/GST)</label>
+                            <input type="text" class="form-control" id="tax_number" name="tax_number" value="{{ company.tax_number or '' }}" placeholder="123456789RT0001">
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label for="address" class="form-label">Address</label>
+                            <input type="text" class="form-control" id="address" name="address" value="{{ company.address or '' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label for="city" class="form-label">City</label>
+                            <input type="text" class="form-control" id="city" name="city" value="{{ company.city or '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="province" class="form-label">Province/State</label>
+                            <input type="text" class="form-control" id="province" name="province" value="{{ company.province or '' }}">
+                        </div>
+                        <div class="col-md-4">
+                            <label for="postal_code" class="form-label">Postal/Zip Code</label>
+                            <input type="text" class="form-control" id="postal_code" name="postal_code" value="{{ company.postal_code or '' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="email" class="form-label">Email</label>
+                            <input type="email" class="form-control" id="email" name="email" value="{{ company.email or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="phone" class="form-label">Phone</label>
+                            <input type="tel" class="form-control" id="phone" name="phone" value="{{ company.phone or '' }}">
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="website" class="form-label">Website</label>
+                            <input type="url" class="form-control" id="website" name="website" value="{{ company.website or '' }}">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="default_hst_rate" class="form-label">Default HST Rate (%) *</label>
+                            <input type="number" min="0" max="100" step="0.01" class="form-control" id="default_hst_rate" name="default_hst_rate" value="{{ company.default_hst_rate * 100 }}" required>
+                            <small class="form-text text-muted">Enter as percentage (e.g., 13 for 13%)</small>
+                        </div>
+                    </div>
+                    
+                    <div class="text-end">
+                        <a href="{{ url_for('index') }}" class="btn btn-secondary">Cancel</a>
+                        <button type="submit" class="btn btn-primary">Save Settings</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Format the HST rate as percentage
+    const hstRateInput = document.getElementById('default_hst_rate');
+    
+    // Update form before submission to convert percentage to decimal
+    document.querySelector('form').addEventListener('submit', function(event) {
+        const hstRate = parseFloat(hstRateInput.value);
+        hstRateInput.value = hstRate / 100;
+    });
+});
+</script>
+{% endblock %}

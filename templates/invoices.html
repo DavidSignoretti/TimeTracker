@@ -1,0 +1,105 @@
+{% extends 'layout.html' %}
+
+{% block title %}Invoices - Time Tracker & Invoicing{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h1><i class="fas fa-file-invoice-dollar"></i> Invoices</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <a href="{{ url_for('create_invoice') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Create New Invoice
+        </a>
+    </div>
+</div>
+
+{% if invoices %}
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Invoice #</th>
+                    <th>Client</th>
+                    <th>Issue Date</th>
+                    <th>Due Date</th>
+                    <th>Subtotal</th>
+                    <th>HST</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invoice in invoices %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('view_invoice', invoice_id=invoice.id) }}">
+                            {{ invoice.invoice_number }}
+                        </a>
+                    </td>
+                    <td>{{ invoice.client.name }}</td>
+                    <td>{{ invoice.date_issued.strftime('%Y-%m-%d') }}</td>
+                    <td>{{ invoice.date_due.strftime('%Y-%m-%d') }}</td>
+                    <td>${{ invoice.subtotal|round(2) }}</td>
+                    <td>${{ invoice.hst_amount|round(2) }}</td>
+                    <td>${{ invoice.total|round(2) }}</td>
+                    <td>
+                        {% if invoice.status == 'draft' %}
+                            <span class="badge bg-secondary">Draft</span>
+                        {% elif invoice.status == 'sent' %}
+                            <span class="badge bg-primary">Sent</span>
+                        {% elif invoice.status == 'paid' %}
+                            <span class="badge bg-success">Paid</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                Actions
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="{{ url_for('view_invoice', invoice_id=invoice.id) }}">View</a></li>
+                                <li><a class="dropdown-item" href="{{ url_for('download_invoice', invoice_id=invoice.id) }}">Download PDF</a></li>
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#deleteInvoiceModal{{ invoice.id }}">
+                                        Delete
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+                        
+                        <!-- Delete Confirmation Modal -->
+                        <div class="modal fade" id="deleteInvoiceModal{{ invoice.id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Confirm Delete</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        Are you sure you want to delete invoice <strong>{{ invoice.invoice_number }}</strong>?
+                                        This will unlink all time entries from this invoice.
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <form action="{{ url_for('delete_invoice', invoice_id=invoice.id) }}" method="post">
+                                            <button type="submit" class="btn btn-danger">Delete</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <div class="alert alert-info">
+        No invoices found. <a href="{{ url_for('create_invoice') }}">Create your first invoice</a> to get started.
+    </div>
+{% endif %}
+{% endblock %}
