@@ -1,10 +1,11 @@
 from reportlab.lib.pagesizes import letter
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
 from reportlab.lib.units import inch
 from datetime import datetime, date
 import io
+import os
 
 def calculate_hours(time_in, time_out):
     """Calculate hours between two time objects"""
@@ -41,7 +42,13 @@ def generate_invoice_pdf(invoice, company):
     
     elements = []
     
-    # Add company logo or name
+    # Add company logo and name
+    logo_path = os.path.join('static', 'images', 'logo.png')
+    if os.path.exists(logo_path):
+        logo = Image(logo_path, width=2*inch, height=0.5*inch)
+        elements.append(logo)
+        elements.append(Spacer(1, 0.1*inch))
+    
     elements.append(Paragraph(f"<b>{company.company_name}</b>", styles['Heading1']))
     elements.append(Spacer(1, 0.1*inch))
     
