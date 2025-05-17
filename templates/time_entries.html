@@ -8,7 +8,10 @@
         <h1><i class="fas fa-clock"></i> Time Entries</h1>
     </div>
     <div class="col-md-6 text-end">
-        <a href="{{ url_for('add_time_entry') }}" class="btn btn-primary">
+        <a href="{{ url_for('timer') }}" class="btn btn-primary me-2">
+            <i class="fas fa-stopwatch"></i> Start Timer
+        </a>
+        <a href="{{ url_for('add_time_entry') }}" class="btn btn-secondary">
             <i class="fas fa-plus"></i> Add Time Entry
         </a>
     </div>

@@ -1,0 +1,295 @@
+{% extends 'layout.html' %}
+
+{% block title %}Time Tracker - Timer{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h1><i class="fas fa-stopwatch"></i> Time Tracker</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <a href="{{ url_for('time_entries') }}" class="btn btn-secondary">
+            <i class="fas fa-list"></i> View All Time Entries
+        </a>
+    </div>
+</div>
+
+<div class="row">
+    <div class="col-md-8 mx-auto">
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="mb-0">Active Timer</h5>
+            </div>
+            <div class="card-body">
+                <form id="timerForm" method="post" action="{{ url_for('save_timer') }}">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="client_id" class="form-label">Client *</label>
+                            <select class="form-select" id="client_id" name="client_id" required>
+                                <option value="">Select a client</option>
+                                {% for client in clients %}
+                                    <option value="{{ client.id }}" data-rate="{{ client.hourly_rate }}">{{ client.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label for="hourly_rate" class="form-label">Hourly Rate ($)</label>
+                            <input type="number" min="0" step="0.01" class="form-control" id="hourly_rate" readonly>
+                            <small class="form-text text-muted">Based on client's default rate</small>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <label for="item" class="form-label">Item/Task Description *</label>
+                            <input type="text" class="form-control" id="item" name="item" required>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <label for="location" class="form-label">Location</label>
+                            <input type="text" class="form-control" id="location" name="location">
+                        </div>
+                        <div class="col-md-6">
+                            <label for="date" class="form-label">Date *</label>
+                            <input type="date" class="form-control" id="date" name="date" value="{{ today.strftime('%Y-%m-%d') }}" required>
+                        </div>
+                    </div>
+                    
+                    <!-- Hidden fields for time data -->
+                    <input type="hidden" id="time_in" name="time_in">
+                    <input type="hidden" id="time_out" name="time_out">
+                    <input type="hidden" id="total_hours" name="total_hours">
+                    
+                    <div class="row mb-4">
+                        <div class="col-md-12">
+                            <div class="card bg-dark">
+                                <div class="card-body text-center">
+                                    <h2 id="timer-display" class="display-1 mb-4">00:00:00</h2>
+                                    <div id="timer-controls">
+                                        <button type="button" id="start-timer" class="btn btn-lg btn-success me-2">
+                                            <i class="fas fa-play"></i> Start
+                                        </button>
+                                        <button type="button" id="pause-timer" class="btn btn-lg btn-warning me-2" disabled>
+                                            <i class="fas fa-pause"></i> Pause
+                                        </button>
+                                        <button type="button" id="stop-timer" class="btn btn-lg btn-danger" disabled>
+                                            <i class="fas fa-stop"></i> Stop
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <div class="card bg-dark">
+                                <div class="card-body">
+                                    <h5 class="card-title">Time Summary</h5>
+                                    <p class="mb-1">Started: <span id="time-started">Not started</span></p>
+                                    <p class="mb-1">Paused: <span id="time-paused">0 times</span></p>
+                                    <p class="mb-0">Elapsed: <span id="time-elapsed">0 seconds</span></p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card bg-dark">
+                                <div class="card-body">
+                                    <h5 class="card-title">Billing Summary</h5>
+                                    <p class="mb-1">Hours: <span id="billing-hours">0.00</span></p>
+                                    <p class="mb-1">Rate: $<span id="billing-rate">0.00</span>/hr</p>
+                                    <p class="mb-0">Amount: $<span id="billing-amount">0.00</span></p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="text-center mt-4">
+                        <button type="submit" id="save-entry" class="btn btn-primary btn-lg" disabled>
+                            <i class="fas fa-save"></i> Save Time Entry
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    // Elements
+    const clientSelect = document.getElementById('client_id');
+    const hourlyRateInput = document.getElementById('hourly_rate');
+    
+    const timerDisplay = document.getElementById('timer-display');
+    const startBtn = document.getElementById('start-timer');
+    const pauseBtn = document.getElementById('pause-timer');
+    const stopBtn = document.getElementById('stop-timer');
+    const saveBtn = document.getElementById('save-entry');
+    
+    const timeStartedEl = document.getElementById('time-started');
+    const timePausedEl = document.getElementById('time-paused');
+    const timeElapsedEl = document.getElementById('time-elapsed');
+    
+    const billingHoursEl = document.getElementById('billing-hours');
+    const billingRateEl = document.getElementById('billing-rate');
+    const billingAmountEl = document.getElementById('billing-amount');
+    
+    const timeInInput = document.getElementById('time_in');
+    const timeOutInput = document.getElementById('time_out');
+    const totalHoursInput = document.getElementById('total_hours');
+    
+    // Timer variables
+    let timerInterval;
+    let startTime = null;
+    let currentTime = 0;
+    let elapsedTime = 0;
+    let pauseCount = 0;
+    let timerRunning = false;
+    let timerPaused = false;
+    
+    // Update hourly rate when client changes
+    clientSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        const rate = selectedOption.getAttribute('data-rate');
+        hourlyRateInput.value = rate || '';
+        billingRateEl.textContent = rate ? parseFloat(rate).toFixed(2) : '0.00';
+        updateBillingAmount();
+    });
+    
+    // Start timer
+    startBtn.addEventListener('click', function() {
+        // Validate that a client and task are selected
+        if (!clientSelect.value || !document.getElementById('item').value) {
+            alert('Please select a client and enter a task description before starting the timer.');
+            return;
+        }
+        
+        if (!timerRunning && !timerPaused) {
+            // First start
+            startTime = new Date();
+            timeStartedEl.textContent = startTime.toLocaleTimeString();
+            timeInInput.value = formatTimeHHMM(startTime);
+        } else if (timerPaused) {
+            // Resuming from pause
+            elapsedTime += (new Date() - currentTime);
+        }
+        
+        timerRunning = true;
+        timerPaused = false;
+        
+        startBtn.disabled = true;
+        pauseBtn.disabled = false;
+        stopBtn.disabled = false;
+        
+        timerInterval = setInterval(updateTimer, 1000);
+    });
+    
+    // Pause timer
+    pauseBtn.addEventListener('click', function() {
+        if (timerRunning) {
+            clearInterval(timerInterval);
+            timerRunning = false;
+            timerPaused = true;
+            currentTime = new Date();
+            pauseCount++;
+            timePausedEl.textContent = pauseCount + (pauseCount === 1 ? ' time' : ' times');
+            
+            startBtn.disabled = false;
+            pauseBtn.disabled = true;
+        }
+    });
+    
+    // Stop timer
+    stopBtn.addEventListener('click', function() {
+        if (timerRunning || timerPaused) {
+            clearInterval(timerInterval);
+            
+            const endTime = new Date();
+            timeOutInput.value = formatTimeHHMM(endTime);
+            
+            // Calculate final elapsed time
+            if (timerRunning) {
+                elapsedTime += (endTime - currentTime);
+            }
+            
+            timerRunning = false;
+            timerPaused = false;
+            
+            startBtn.disabled = false;
+            pauseBtn.disabled = true;
+            stopBtn.disabled = true;
+            saveBtn.disabled = false;
+            
+            // Calculate total hours with 2 decimal places
+            const hours = (elapsedTime / 3600000).toFixed(2);
+            totalHoursInput.value = hours;
+            billingHoursEl.textContent = hours;
+            updateBillingAmount();
+        }
+    });
+    
+    // Update timer display
+    function updateTimer() {
+        currentTime = new Date();
+        const totalElapsed = elapsedTime + (currentTime - startTime);
+        
+        const hours = Math.floor(totalElapsed / 3600000);
+        const minutes = Math.floor((totalElapsed % 3600000) / 60000);
+        const seconds = Math.floor((totalElapsed % 60000) / 1000);
+        
+        timerDisplay.textContent = 
+            (hours < 10 ? '0' + hours : hours) + ':' +
+            (minutes < 10 ? '0' + minutes : minutes) + ':' +
+            (seconds < 10 ? '0' + seconds : seconds);
+        
+        // Update elapsed time in the summary
+        const elapsedSeconds = Math.floor(totalElapsed / 1000);
+        timeElapsedEl.textContent = formatElapsedTime(elapsedSeconds);
+        
+        // Update billing hours (continuously while timer is running)
+        const currentHours = (totalElapsed / 3600000).toFixed(2);
+        billingHoursEl.textContent = currentHours;
+        updateBillingAmount();
+    }
+    
+    // Update billing amount based on hours and rate
+    function updateBillingAmount() {
+        const hours = parseFloat(billingHoursEl.textContent);
+        const rate = parseFloat(billingRateEl.textContent);
+        
+        if (!isNaN(hours) && !isNaN(rate)) {
+            const amount = (hours * rate).toFixed(2);
+            billingAmountEl.textContent = amount;
+        }
+    }
+    
+    // Format elapsed time in a human-readable format
+    function formatElapsedTime(seconds) {
+        if (seconds < 60) {
+            return seconds + ' seconds';
+        } else if (seconds < 3600) {
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            return minutes + ' minute' + (minutes !== 1 ? 's' : '') + 
+                (remainingSeconds > 0 ? ', ' + remainingSeconds + ' second' + (remainingSeconds !== 1 ? 's' : '') : '');
+        } else {
+            const hours = Math.floor(seconds / 3600);
+            const remainingMinutes = Math.floor((seconds % 3600) / 60);
+            return hours + ' hour' + (hours !== 1 ? 's' : '') + 
+                (remainingMinutes > 0 ? ', ' + remainingMinutes + ' minute' + (remainingMinutes !== 1 ? 's' : '') : '');
+        }
+    }
+    
+    // Format time as HH:MM for form submission
+    function formatTimeHHMM(date) {
+        return date.getHours().toString().padStart(2, '0') + ':' + 
+               date.getMinutes().toString().padStart(2, '0');
+    }
+});
+</script>
+{% endblock %}

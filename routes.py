@@ -124,6 +124,46 @@ def time_entries():
     clients = Client.query.order_by(Client.name).all()
     return render_template('time_entries.html', entries=entries, clients=clients)
 
+@app.route('/timer')
+def timer():
+    clients = Client.query.order_by(Client.name).all()
+    today = date.today()
+    return render_template('timer.html', clients=clients, today=today)
+
+@app.route('/save-timer', methods=['POST'])
+def save_timer():
+    try:
+        client_id = int(request.form['client_id'])
+        client = Client.query.get_or_404(client_id)
+        
+        item = request.form['item']
+        location = request.form['location']
+        entry_date = datetime.strptime(request.form['date'], '%Y-%m-%d').date()
+        time_in = datetime.strptime(request.form['time_in'], '%H:%M').time()
+        time_out = datetime.strptime(request.form['time_out'], '%H:%M').time()
+        total_hours = float(request.form['total_hours'])
+        
+        new_entry = TimeEntry(
+            client_id=client_id,
+            location=location,
+            item=item,
+            date=entry_date,
+            time_in=time_in,
+            time_out=time_out,
+            total_hours=total_hours,
+            hourly_rate=client.hourly_rate
+        )
+        
+        db.session.add(new_entry)
+        db.session.commit()
+        
+        flash('Time entry saved successfully!', 'success')
+        return redirect(url_for('time_entries'))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error saving time entry: {str(e)}', 'danger')
+        return redirect(url_for('timer'))
+
 @app.route('/time-entries/add', methods=['GET', 'POST'])
 def add_time_entry():
     clients = Client.query.order_by(Client.name).all()
