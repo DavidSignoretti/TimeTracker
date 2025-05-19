@@ -1,0 +1,7 @@
+docker run -d --name xstrat-time-tracker \
+-p 5000:5000 \
+-v sqlite_data:/app/instance \
+-e FLASK_APP=main.py \
+-e FLASK_ENV=production \
+--restart unless-stopped \
+xstrat-time-tracker
