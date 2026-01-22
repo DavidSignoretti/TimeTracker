@@ -24,14 +24,14 @@
                             <input type="text" class="form-control" id="contact_person" name="contact_person">
                         </div>
                     </div>
-                    
+
                     <div class="row mb-3">
                         <div class="col-md-12">
                             <label for="address" class="form-label">Address</label>
                             <input type="text" class="form-control" id="address" name="address">
                         </div>
                     </div>
-                    
+
                     <div class="row mb-3">
                         <div class="col-md-4">
                             <label for="city" class="form-label">City</label>
@@ -46,7 +46,7 @@
                             <input type="text" class="form-control" id="postal_code" name="postal_code">
                         </div>
                     </div>
-                    
+
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label for="email" class="form-label">Email</label>
@@ -57,14 +57,51 @@
                             <input type="tel" class="form-control" id="phone" name="phone">
                         </div>
                     </div>
-                    
+
                     <div class="row mb-3">
                         <div class="col-md-6">
-                            <label for="hourly_rate" class="form-label">Hourly Rate ($) *</label>
+                            <label for="hourly_rate" class="form-label">Default Hourly Rate ($) *</label>
                             <input type="number" min="0" step="0.01" class="form-control" id="hourly_rate" name="hourly_rate" required>
+                            <small class="text-muted">This rate is kept for backward compatibility. Use the rates below for new time entries.</small>
                         </div>
                     </div>
-                    
+
+                    <div class="row mb-3">
+                        <div class="col-md-12">
+                            <h4>Hourly Rates</h4>
+                            <div id="hourly-rates-container">
+                                <div class="alert alert-info">No hourly rates defined yet. Add your first rate below.</div>
+                            </div>
+                            <button type="button" id="add-rate-btn" class="btn btn-secondary mt-2">
+                                <i class="fas fa-plus"></i> Add Rate
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Template for new rate row -->
+                    <template id="rate-row-template">
+                        <div class="row mb-2 hourly-rate-row">
+                            <div class="col-md-4">
+                                <input type="text" class="form-control" name="rate_names[]" placeholder="Rate Name" required>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="input-group">
+                                    <span class="input-group-text">$</span>
+                                    <input type="number" min="0" step="0.01" class="form-control" name="rate_values[]" placeholder="0.00" required>
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <div class="form-check">
+                                    <input class="form-check-input default-rate-checkbox" type="radio" name="default_rate" value="">
+                                    <label class="form-check-label">Default Rate</label>
+                                </div>
+                            </div>
+                            <div class="col-md-2">
+                                <button type="button" class="btn btn-danger btn-sm remove-rate"><i class="fas fa-trash"></i></button>
+                            </div>
+                        </div>
+                    </template>
+
                     <div class="text-end">
                         <a href="{{ url_for('clients') }}" class="btn btn-secondary">Cancel</a>
                         <button type="submit" class="btn btn-primary">Save Client</button>

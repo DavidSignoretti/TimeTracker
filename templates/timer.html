@@ -28,17 +28,25 @@
                             <select class="form-select" id="client_id" name="client_id" required>
                                 <option value="">Select a client</option>
                                 {% for client in clients %}
-                                    <option value="{{ client.id }}" data-rate="{{ client.hourly_rate }}">{{ client.name }}</option>
+                                    <option value="{{ client.id }}" 
+                                            data-default-rate="{{ client.get_default_rate() }}"
+                                            data-rates='{{ client.hourly_rates|map(attribute="rate")|list|tojson }}'
+                                            data-rate-names='{{ client.hourly_rates|map(attribute="name")|list|tojson }}'
+                                            data-rate-ids='{{ client.hourly_rates|map(attribute="id")|list|tojson }}'>
+                                        {{ client.name }}
+                                    </option>
                                 {% endfor %}
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label for="hourly_rate" class="form-label">Hourly Rate ($)</label>
-                            <input type="number" min="0" step="0.01" class="form-control" id="hourly_rate" readonly>
-                            <small class="form-text text-muted">Based on client's default rate</small>
+                            <label for="rate_id" class="form-label">Hourly Rate</label>
+                            <select class="form-select" id="rate_id" name="rate_id" required>
+                                <option value="">Select a client first</option>
+                            </select>
+                            <input type="hidden" id="hourly_rate" name="hourly_rate">
                         </div>
                     </div>
-                    
+
                     <div class="row mb-3">
                         <div class="col-md-12">
                             <label for="item" class="form-label">Item/Task Description *</label>
@@ -51,7 +59,7 @@
                             <input type="hidden" id="task_id" name="task_id" value="{{ task_id or '' }}">
                         </div>
                     </div>
-                    
+
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label for="location" class="form-label">Location</label>
@@ -62,12 +70,12 @@
                             <input type="date" class="form-control" id="date" name="date" value="{{ today.strftime('%Y-%m-%d') }}" required>
                         </div>
                     </div>
-                    
+
                     <!-- Hidden fields for time data -->
                     <input type="hidden" id="time_in" name="time_in">
                     <input type="hidden" id="time_out" name="time_out">
                     <input type="hidden" id="total_hours" name="total_hours">
-                    
+
                     <div class="row mb-4">
                         <div class="col-md-12">
                             <div class="card bg-dark">
@@ -88,7 +96,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <div class="card bg-dark">
@@ -111,7 +119,7 @@
                             </div>
                         </div>
                     </div>
-                    
+
                     <div class="text-center mt-4">
                         <button type="submit" id="save-entry" class="btn btn-primary btn-lg" disabled>
                             <i class="fas fa-save"></i> Save Time Entry
@@ -207,7 +215,7 @@ document.addEventListener('DOMContentLoaded', function() {
     const itemInput = document.getElementById('item');
     const taskIdInput = document.getElementById('task_id');
     const searchInput = document.getElementById('taskSearchInput');
-    
+
     // Task selection
     const selectTaskButtons = document.querySelectorAll('.select-task');
     selectTaskButtons.forEach(button => {
@@ -215,33 +223,33 @@ document.addEventListener('DOMContentLoaded', function() {
             const taskId = this.getAttribute('data-task-id');
             const taskTitle = this.getAttribute('data-task-title');
             const clientId = this.getAttribute('data-client-id');
-            
+
             // Update form with selected task
             taskIdInput.value = taskId;
             itemInput.value = taskTitle;
             clientSelect.value = clientId;
-            
+
             // Trigger change event on client select to update the hourly rate
             const event = new Event('change');
             clientSelect.dispatchEvent(event);
-            
+
             // Close the modal
             const modal = bootstrap.Modal.getInstance(document.getElementById('taskSelectorModal'));
             modal.hide();
         });
     });
-    
+
     // Task search functionality
     if (searchInput) {
         searchInput.addEventListener('keyup', function() {
             const searchTerm = this.value.toLowerCase();
             const taskTable = document.getElementById('taskTable');
             const rows = taskTable.querySelectorAll('tbody tr');
-            
+
             rows.forEach(row => {
                 const titleCell = row.querySelector('td:first-child');
                 const title = titleCell.textContent.toLowerCase();
-                
+
                 if (title.includes(searchTerm)) {
                     row.style.display = '';
                 } else {
@@ -250,25 +258,25 @@ document.addEventListener('DOMContentLoaded', function() {
             });
         });
     }
-    
+
     const timerDisplay = document.getElementById('timer-display');
     const startBtn = document.getElementById('start-timer');
     const pauseBtn = document.getElementById('pause-timer');
     const stopBtn = document.getElementById('stop-timer');
     const saveBtn = document.getElementById('save-entry');
-    
+
     const timeStartedEl = document.getElementById('time-started');
     const timePausedEl = document.getElementById('time-paused');
     const timeElapsedEl = document.getElementById('time-elapsed');
-    
+
     const billingHoursEl = document.getElementById('billing-hours');
     const billingRateEl = document.getElementById('billing-rate');
     const billingAmountEl = document.getElementById('billing-amount');
-    
+
     const timeInInput = document.getElementById('time_in');
     const timeOutInput = document.getElementById('time_out');
     const totalHoursInput = document.getElementById('total_hours');
-    
+
     // Timer variables
     let timerInterval;
     let startTime = null;
@@ -277,16 +285,77 @@ document.addEventListener('DOMContentLoaded', function() {
     let pauseCount = 0;
     let timerRunning = false;
     let timerPaused = false;
-    
-    // Update hourly rate when client changes
+
+    // Elements for hourly rate selection
+    const rateSelect = document.getElementById('rate_id');
+
+    // Update hourly rates dropdown when client changes
     clientSelect.addEventListener('change', function() {
         const selectedOption = this.options[this.selectedIndex];
-        const rate = selectedOption.getAttribute('data-rate');
-        hourlyRateInput.value = rate || '';
-        billingRateEl.textContent = rate ? parseFloat(rate).toFixed(2) : '0.00';
+        if (!selectedOption.value) {
+            // No client selected
+            rateSelect.innerHTML = '<option value="">Select a client first</option>';
+            hourlyRateInput.value = '';
+            billingRateEl.textContent = '0.00';
+            updateBillingAmount();
+            return;
+        }
+
+        // Get rates data from the selected client
+        const rates = JSON.parse(selectedOption.getAttribute('data-rates') || '[]');
+        const rateNames = JSON.parse(selectedOption.getAttribute('data-rate-names') || '[]');
+        const rateIds = JSON.parse(selectedOption.getAttribute('data-rate-ids') || '[]');
+        const defaultRate = parseFloat(selectedOption.getAttribute('data-default-rate') || 0);
+
+        // Clear and populate the rates dropdown
+        rateSelect.innerHTML = '';
+
+        if (rates.length === 0) {
+            // If no rates, use the default rate
+            const option = document.createElement('option');
+            option.value = 'default';
+            option.textContent = `Default Rate ($${defaultRate.toFixed(2)})`;
+            option.setAttribute('data-rate', defaultRate);
+            rateSelect.appendChild(option);
+
+            hourlyRateInput.value = defaultRate;
+            billingRateEl.textContent = defaultRate.toFixed(2);
+        } else {
+            // Add all available rates
+            for (let i = 0; i < rates.length; i++) {
+                const option = document.createElement('option');
+                option.value = rateIds[i];
+                option.textContent = `${rateNames[i]} ($${parseFloat(rates[i]).toFixed(2)})`;
+                option.setAttribute('data-rate', rates[i]);
+                rateSelect.appendChild(option);
+            }
+
+            // Select the first rate by default
+            if (rateSelect.options.length > 0) {
+                rateSelect.selectedIndex = 0;
+                const rate = parseFloat(rateSelect.options[0].getAttribute('data-rate'));
+                hourlyRateInput.value = rate;
+                billingRateEl.textContent = rate.toFixed(2);
+            }
+        }
+
         updateBillingAmount();
     });
-    
+
+    // Update hourly rate when rate selection changes
+    rateSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        if (!selectedOption.value) {
+            hourlyRateInput.value = '';
+            billingRateEl.textContent = '0.00';
+        } else {
+            const rate = parseFloat(selectedOption.getAttribute('data-rate'));
+            hourlyRateInput.value = rate;
+            billingRateEl.textContent = rate.toFixed(2);
+        }
+        updateBillingAmount();
+    });
+
     // Start timer
     startBtn.addEventListener('click', function() {
         // Validate that a client and task are selected
@@ -294,7 +363,7 @@ document.addEventListener('DOMContentLoaded', function() {
             alert('Please select a client and enter a task description before starting the timer.');
             return;
         }
-        
+
         if (!timerRunning && !timerPaused) {
             // First start
             startTime = new Date();
@@ -304,17 +373,17 @@ document.addEventListener('DOMContentLoaded', function() {
             // Resuming from pause
             elapsedTime += (new Date() - currentTime);
         }
-        
+
         timerRunning = true;
         timerPaused = false;
-        
+
         startBtn.disabled = true;
         pauseBtn.disabled = false;
         stopBtn.disabled = false;
-        
+
         timerInterval = setInterval(updateTimer, 1000);
     });
-    
+
     // Pause timer
     pauseBtn.addEventListener('click', function() {
         if (timerRunning) {
@@ -324,33 +393,33 @@ document.addEventListener('DOMContentLoaded', function() {
             currentTime = new Date();
             pauseCount++;
             timePausedEl.textContent = pauseCount + (pauseCount === 1 ? ' time' : ' times');
-            
+
             startBtn.disabled = false;
             pauseBtn.disabled = true;
         }
     });
-    
+
     // Stop timer
     stopBtn.addEventListener('click', function() {
         if (timerRunning || timerPaused) {
             clearInterval(timerInterval);
-            
+
             const endTime = new Date();
             timeOutInput.value = formatTimeHHMM(endTime);
-            
+
             // Calculate final elapsed time
             if (timerRunning) {
                 elapsedTime += (endTime - currentTime);
             }
-            
+
             timerRunning = false;
             timerPaused = false;
-            
+
             startBtn.disabled = false;
             pauseBtn.disabled = true;
             stopBtn.disabled = true;
             saveBtn.disabled = false;
-            
+
             // Calculate total hours with 2 decimal places
             const hours = (elapsedTime / 3600000).toFixed(2);
             totalHoursInput.value = hours;
@@ -358,42 +427,42 @@ document.addEventListener('DOMContentLoaded', function() {
             updateBillingAmount();
         }
     });
-    
+
     // Update timer display
     function updateTimer() {
         currentTime = new Date();
         const totalElapsed = elapsedTime + (currentTime - startTime);
-        
+
         const hours = Math.floor(totalElapsed / 3600000);
         const minutes = Math.floor((totalElapsed % 3600000) / 60000);
         const seconds = Math.floor((totalElapsed % 60000) / 1000);
-        
+
         timerDisplay.textContent = 
             (hours < 10 ? '0' + hours : hours) + ':' +
             (minutes < 10 ? '0' + minutes : minutes) + ':' +
             (seconds < 10 ? '0' + seconds : seconds);
-        
+
         // Update elapsed time in the summary
         const elapsedSeconds = Math.floor(totalElapsed / 1000);
         timeElapsedEl.textContent = formatElapsedTime(elapsedSeconds);
-        
+
         // Update billing hours (continuously while timer is running)
         const currentHours = (totalElapsed / 3600000).toFixed(2);
         billingHoursEl.textContent = currentHours;
         updateBillingAmount();
     }
-    
+
     // Update billing amount based on hours and rate
     function updateBillingAmount() {
         const hours = parseFloat(billingHoursEl.textContent);
         const rate = parseFloat(billingRateEl.textContent);
-        
+
         if (!isNaN(hours) && !isNaN(rate)) {
             const amount = (hours * rate).toFixed(2);
             billingAmountEl.textContent = amount;
         }
     }
-    
+
     // Format elapsed time in a human-readable format
     function formatElapsedTime(seconds) {
         if (seconds < 60) {
@@ -410,7 +479,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 (remainingMinutes > 0 ? ', ' + remainingMinutes + ' minute' + (remainingMinutes !== 1 ? 's' : '') : '');
         }
     }
-    
+
     // Format time as HH:MM for form submission
     function formatTimeHHMM(date) {
         return date.getHours().toString().padStart(2, '0') + ':' + 

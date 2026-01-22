@@ -127,6 +127,9 @@
                                     <a href="{{ url_for('timer_with_task', task_id=task.id) }}" class="btn btn-sm btn-outline-success">
                                         <i class="fas fa-stopwatch"></i>
                                     </a>
+                                    <a href="{{ url_for('create_event_from_task', task_id=task.id) }}" class="btn btn-sm btn-outline-info" title="Schedule in Calendar">
+                                        <i class="fas fa-calendar-plus"></i>
+                                    </a>
                                     <button type="button" class="btn btn-sm btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteTaskModal{{ task.id }}">
                                         <i class="fas fa-trash"></i>
                                     </button>

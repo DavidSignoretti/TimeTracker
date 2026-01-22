@@ -1,5 +1,5 @@
 from app import db
-from datetime import datetime
+from datetime import datetime, timedelta
 from enum import Enum
 
 class TaskStatus(Enum):
@@ -7,6 +7,25 @@ class TaskStatus(Enum):
     IN_PROGRESS = "in_progress"
     COMPLETED = "completed"
     ARCHIVED = "archived"
+    
+class QuoteStatus(Enum):
+    PENDING = "pending"
+    SENT = "sent"
+    ACCEPTED = "accepted"
+    INVOICED = "invoiced"
+    REJECTED = "rejected"
+
+class HourlyRate(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    name = db.Column(db.String(100), nullable=False)  # Name/description of the rate
+    rate = db.Column(db.Float, nullable=False)
+    is_default = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def __repr__(self):
+        return f'<HourlyRate {self.name}: ${self.rate} for client {self.client_id}>'
 
 class Client(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -18,14 +37,24 @@ class Client(db.Model):
     phone = db.Column(db.String(20), nullable=True)
     email = db.Column(db.String(100), nullable=True)
     contact_person = db.Column(db.String(100), nullable=True)
-    hourly_rate = db.Column(db.Float, nullable=False, default=0.0)
+    hourly_rate = db.Column(db.Float, nullable=False, default=0.0)  # Kept for backward compatibility
     time_entries = db.relationship('TimeEntry', backref='client', lazy=True, cascade="all, delete-orphan")
     invoices = db.relationship('Invoice', backref='client', lazy=True, cascade="all, delete-orphan")
+    hourly_rates = db.relationship('HourlyRate', backref='client', lazy=True, cascade="all, delete-orphan")
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     def __repr__(self):
         return f'<Client {self.name}>'
+
+    def get_default_rate(self):
+        # First try to get a rate marked as default
+        default_rate = HourlyRate.query.filter_by(client_id=self.id, is_default=True).first()
+        if default_rate:
+            return default_rate.rate
+
+        # If no default rate is set, use the legacy hourly_rate field
+        return self.hourly_rate
 
 
 class TimeEntry(db.Model):
@@ -40,6 +69,7 @@ class TimeEntry(db.Model):
     total_hours = db.Column(db.Float, nullable=False)  # Stored for quick access
     hourly_rate = db.Column(db.Float, nullable=False)  # Store the rate at the time of entry
     invoice_id = db.Column(db.Integer, db.ForeignKey('invoice.id'), nullable=True)
+    quote_id = db.Column(db.Integer, db.ForeignKey('quote.id'), nullable=True)  # Link to a quote if applicable
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -78,13 +108,71 @@ class Task(db.Model):
     estimated_hours = db.Column(db.Float, nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
-    
+
     # Add relationships
     client = db.relationship('Client', backref=db.backref('tasks', lazy=True, cascade="all, delete-orphan"))
     time_entries = db.relationship('TimeEntry', backref='task', lazy=True)
-    
+
     def __repr__(self):
         return f'<Task {self.id}: {self.title}>'
+
+
+class Quote(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    quote_number = db.Column(db.String(20), nullable=False, unique=True)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    date_issued = db.Column(db.Date, nullable=False, default=datetime.utcnow().date)
+    date_valid_until = db.Column(db.Date, nullable=True)
+    subtotal = db.Column(db.Float, nullable=False, default=0.0)
+    hst_rate = db.Column(db.Float, nullable=False, default=0.13)  # 13% is typical HST rate
+    hst_amount = db.Column(db.Float, nullable=False, default=0.0)
+    total = db.Column(db.Float, nullable=False, default=0.0)
+    status = db.Column(db.String(20), nullable=False, default=QuoteStatus.PENDING.value)
+    notes = db.Column(db.Text, nullable=True)
+    invoice_id = db.Column(db.Integer, db.ForeignKey('invoice.id'), nullable=True)  # Link to invoice if converted
+    time_entries = db.relationship('TimeEntry', backref='quote', lazy=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Add relationship to client
+    client = db.relationship('Client', backref=db.backref('quotes', lazy=True, cascade="all, delete-orphan"))
+    # Add relationship to invoice if converted
+    invoice = db.relationship('Invoice', backref=db.backref('quote', uselist=False), lazy=True)
+
+    def __repr__(self):
+        return f'<Quote {self.quote_number} for {self.client_id}>'
+    
+    def convert_to_invoice(self):
+        """Convert this quote to an invoice"""
+        from app import db
+        
+        # Create a new invoice based on this quote
+        invoice = Invoice(
+            invoice_number=self.quote_number.replace('QUO-', 'INV-'),
+            client_id=self.client_id,
+            date_issued=datetime.utcnow().date(),
+            date_due=datetime.utcnow().date() + timedelta(days=30),
+            subtotal=self.subtotal,
+            hst_rate=self.hst_rate,
+            hst_amount=self.hst_amount,
+            total=self.total,
+            status='draft',
+            notes=self.notes
+        )
+        
+        db.session.add(invoice)
+        db.session.flush()  # Get the invoice ID
+        
+        # Link the quote to the invoice
+        self.invoice_id = invoice.id
+        self.status = QuoteStatus.INVOICED.value
+        
+        # Link the time entries to the invoice
+        for entry in self.time_entries:
+            entry.invoice_id = invoice.id
+            
+        db.session.commit()
+        return invoice
 
 
 class CompanySettings(db.Model):
@@ -104,3 +192,23 @@ class CompanySettings(db.Model):
 
     def __repr__(self):
         return f'<CompanySettings {self.company_name}>'
+
+class CalendarEvent(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(200), nullable=False)
+    location = db.Column(db.String(200), nullable=True)
+    all_day = db.Column(db.Boolean, default=False)
+    start_time = db.Column(db.DateTime, nullable=False)
+    end_time = db.Column(db.DateTime, nullable=False)
+    client_id = db.Column(db.Integer, db.ForeignKey('client.id'), nullable=False)
+    task_id = db.Column(db.Integer, db.ForeignKey('task.id'), nullable=True)
+    is_billable = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    # Relationships
+    client = db.relationship('Client', backref=db.backref('calendar_events', lazy=True, cascade="all, delete-orphan"))
+    task = db.relationship('Task', backref=db.backref('calendar_events', lazy=True))
+
+    def __repr__(self):
+        return f'<CalendarEvent {self.id}: {self.title}>'

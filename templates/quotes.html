@@ -1,0 +1,116 @@
+{% extends 'layout.html' %}
+
+{% block title %}Quotes - Time Tracker & Invoicing{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h1><i class="fas fa-file-contract"></i> Quotes</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <a href="{{ url_for('create_quote') }}" class="btn btn-primary">
+            <i class="fas fa-plus"></i> Create New Quote
+        </a>
+    </div>
+</div>
+
+{% if quotes %}
+    <div class="table-responsive">
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th>Quote #</th>
+                    <th>Client</th>
+                    <th>Issue Date</th>
+                    <th>Valid Until</th>
+                    <th>Subtotal</th>
+                    <th>HST</th>
+                    <th>Total</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for quote in quotes %}
+                <tr>
+                    <td>
+                        <a href="{{ url_for('view_quote', quote_id=quote.id) }}">
+                            {{ quote.quote_number }}
+                        </a>
+                    </td>
+                    <td>{{ quote.client.name }}</td>
+                    <td>{{ quote.date_issued.strftime('%Y-%m-%d') }}</td>
+                    <td>{{ quote.date_valid_until.strftime('%Y-%m-%d') }}</td>
+                    <td>${{ quote.subtotal|round(2) }}</td>
+                    <td>${{ quote.hst_amount|round(2) }}</td>
+                    <td>${{ quote.total|round(2) }}</td>
+                    <td>
+                        {% if quote.status == 'pending' %}
+                            <span class="badge bg-secondary">Pending</span>
+                        {% elif quote.status == 'sent' %}
+                            <span class="badge bg-primary">Sent</span>
+                        {% elif quote.status == 'accepted' %}
+                            <span class="badge bg-success">Accepted</span>
+                        {% elif quote.status == 'invoiced' %}
+                            <span class="badge bg-info">Invoiced</span>
+                        {% elif quote.status == 'rejected' %}
+                            <span class="badge bg-danger">Rejected</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="dropdown">
+                            <button class="btn btn-sm btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                Actions
+                            </button>
+                            <ul class="dropdown-menu dropdown-menu-end">
+                                <li><a class="dropdown-item" href="{{ url_for('view_quote', quote_id=quote.id) }}">View</a></li>
+                                <li><a class="dropdown-item" href="{{ url_for('download_quote', quote_id=quote.id) }}">Download PDF</a></li>
+                                {% if quote.status != 'invoiced' %}
+                                <li>
+                                    <form action="{{ url_for('convert_quote_to_invoice', quote_id=quote.id) }}" method="post" class="d-inline">
+                                        <button type="submit" class="dropdown-item text-primary">Convert to Invoice</button>
+                                    </form>
+                                </li>
+                                {% endif %}
+                                <li><hr class="dropdown-divider"></li>
+                                <li>
+                                    <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#deleteQuoteModal{{ quote.id }}">
+                                        Delete
+                                    </button>
+                                </li>
+                            </ul>
+                        </div>
+                        
+                        <!-- Delete Confirmation Modal -->
+                        <div class="modal fade" id="deleteQuoteModal{{ quote.id }}" tabindex="-1" aria-hidden="true">
+                            <div class="modal-dialog">
+                                <div class="modal-content">
+                                    <div class="modal-header">
+                                        <h5 class="modal-title">Confirm Delete</h5>
+                                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                                    </div>
+                                    <div class="modal-body">
+                                        Are you sure you want to delete quote <strong>{{ quote.quote_number }}</strong>?
+                                        This will unlink all time entries from this quote.
+                                    </div>
+                                    <div class="modal-footer">
+                                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                                        <form action="{{ url_for('delete_quote', quote_id=quote.id) }}" method="post">
+                                            <button type="submit" class="btn btn-danger">Delete</button>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+{% else %}
+    <div class="alert alert-info">
+        No quotes found. <a href="{{ url_for('create_quote') }}">Create your first quote</a> to get started.
+    </div>
+{% endif %}
+{% endblock %}

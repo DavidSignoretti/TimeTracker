@@ -1,8 +1,8 @@
 from flask import render_template, request, redirect, url_for, flash, jsonify, send_file, abort
 from sqlalchemy import func, desc
 from app import app, db
-from models import Client, TimeEntry, Invoice, CompanySettings, Task, TaskStatus
-from utils import generate_invoice_pdf, calculate_hours
+from models import Client, TimeEntry, Invoice, CompanySettings, Task, TaskStatus, HourlyRate, Quote, QuoteStatus, CalendarEvent
+from utils import generate_invoice_pdf, generate_quote_pdf, calculate_hours
 from datetime import datetime, date, timedelta
 import os
 import io
@@ -197,6 +197,35 @@ def add_client():
             )
 
             db.session.add(new_client)
+            db.session.commit()  # Commit to get the client ID
+
+            # Process hourly rates
+            rate_names = request.form.getlist('rate_names[]')
+            rate_values = request.form.getlist('rate_values[]')
+            default_rate_index = request.form.get('default_rate')
+
+            if rate_names and rate_values:
+                for i, (name, value) in enumerate(zip(rate_names, rate_values)):
+                    if name and value:
+                        is_default = str(i) == default_rate_index
+                        rate = HourlyRate(
+                            client_id=new_client.id,
+                            name=name,
+                            rate=float(value),
+                            is_default=is_default
+                        )
+                        db.session.add(rate)
+
+            # If no custom rates were added, create a default one based on the hourly_rate field
+            if not (rate_names and rate_values):
+                default_rate = HourlyRate(
+                    client_id=new_client.id,
+                    name="Default Rate",
+                    rate=hourly_rate,
+                    is_default=True
+                )
+                db.session.add(default_rate)
+
             db.session.commit()
 
             flash('Client added successfully!', 'success')
@@ -222,6 +251,59 @@ def edit_client(client_id):
             client.email = request.form['email']
             client.contact_person = request.form['contact_person']
             client.hourly_rate = float(request.form['hourly_rate'])
+
+            # Process hourly rates
+            rate_ids = request.form.getlist('rate_ids[]')
+            rate_names = request.form.getlist('rate_names[]')
+            rate_values = request.form.getlist('rate_values[]')
+            default_rate_index = request.form.get('default_rate')
+
+            # First, reset all default flags
+            for rate in client.hourly_rates:
+                rate.is_default = False
+
+            # Track which rates we've updated
+            updated_rate_ids = []
+
+            # Update existing rates and add new ones
+            if rate_names and rate_values:
+                for i, (name, value) in enumerate(zip(rate_names, rate_values)):
+                    if name and value:
+                        rate_id = rate_ids[i] if i < len(rate_ids) and rate_ids[i] else None
+                        is_default = str(i) == default_rate_index
+
+                        if rate_id:
+                            # Update existing rate
+                            rate = HourlyRate.query.get(int(rate_id))
+                            if rate:
+                                rate.name = name
+                                rate.rate = float(value)
+                                rate.is_default = is_default
+                                updated_rate_ids.append(int(rate_id))
+                        else:
+                            # Add new rate
+                            rate = HourlyRate(
+                                client_id=client.id,
+                                name=name,
+                                rate=float(value),
+                                is_default=is_default
+                            )
+                            db.session.add(rate)
+
+            # Delete rates that weren't in the form
+            for rate in client.hourly_rates:
+                if rate.id not in updated_rate_ids and rate_ids:
+                    db.session.delete(rate)
+
+            # If no rates exist after processing, create a default one
+            if not client.hourly_rates or (not rate_names and not rate_values):
+                default_rate = HourlyRate(
+                    client_id=client.id,
+                    name="Default Rate",
+                    rate=client.hourly_rate,
+                    is_default=True
+                )
+                db.session.add(default_rate)
 
             db.session.commit()
 
@@ -283,6 +365,17 @@ def save_timer():
         time_out = datetime.strptime(request.form['time_out'], '%H:%M').time()
         total_hours = float(request.form['total_hours'])
 
+        # Get the hourly rate
+        hourly_rate = float(request.form['hourly_rate'])
+
+        # Get rate_id if it exists and is not 'default'
+        rate_id = request.form.get('rate_id')
+        if rate_id and rate_id != 'default':
+            # Verify this rate belongs to the client
+            rate = HourlyRate.query.get(int(rate_id))
+            if rate and rate.client_id == client_id:
+                hourly_rate = rate.rate
+
         # Get task_id if it exists
         task_id = request.form.get('task_id')
         if task_id and task_id.strip():
@@ -303,7 +396,7 @@ def save_timer():
             time_in=time_in,
             time_out=time_out,
             total_hours=total_hours,
-            hourly_rate=client.hourly_rate
+            hourly_rate=hourly_rate
         )
 
         db.session.add(new_entry)
@@ -338,6 +431,17 @@ def add_time_entry():
             # Calculate total hours
             total_hours = calculate_hours(time_in, time_out)
 
+            # Get the hourly rate
+            hourly_rate = float(request.form['hourly_rate'])
+
+            # Get rate_id if it exists and is not 'default'
+            rate_id = request.form.get('rate_id')
+            if rate_id and rate_id != 'default':
+                # Verify this rate belongs to the client
+                rate = HourlyRate.query.get(int(rate_id))
+                if rate and rate.client_id == client_id:
+                    hourly_rate = rate.rate
+
             new_entry = TimeEntry(
                 client_id=client_id,
                 location=location,
@@ -346,7 +450,7 @@ def add_time_entry():
                 time_in=time_in,
                 time_out=time_out,
                 total_hours=total_hours,
-                hourly_rate=client.hourly_rate
+                hourly_rate=hourly_rate
             )
 
             db.session.add(new_entry)
@@ -379,7 +483,19 @@ def edit_time_entry(entry_id):
 
             # Recalculate total hours
             entry.total_hours = calculate_hours(entry.time_in, entry.time_out)
-            entry.hourly_rate = client.hourly_rate
+
+            # Get the hourly rate
+            hourly_rate = float(request.form['hourly_rate'])
+
+            # Get rate_id if it exists and is not 'default'
+            rate_id = request.form.get('rate_id')
+            if rate_id and rate_id != 'default':
+                # Verify this rate belongs to the client
+                rate = HourlyRate.query.get(int(rate_id))
+                if rate and rate.client_id == client_id:
+                    hourly_rate = rate.rate
+
+            entry.hourly_rate = hourly_rate
 
             db.session.commit()
 
@@ -567,6 +683,190 @@ def download_invoice(invoice_id):
         flash(f'Error generating PDF: {str(e)}', 'danger')
         return redirect(url_for('view_invoice', invoice_id=invoice_id))
 
+# Quote routes
+@app.route('/quotes')
+def quotes():
+    quotes = Quote.query.order_by(Quote.date_issued.desc()).all()
+    return render_template('quotes.html', quotes=quotes)
+
+@app.route('/quotes/create', methods=['GET', 'POST'])
+def create_quote():
+    clients = Client.query.order_by(Client.name).all()
+
+    if request.method == 'POST':
+        try:
+            client_id = int(request.form['client_id'])
+            client = Client.query.get_or_404(client_id)
+
+            # Find the next quote number
+            last_quote = Quote.query.order_by(Quote.id.desc()).first()
+            if last_quote:
+                # Extract the numeric part and increment
+                last_num = int(last_quote.quote_number.split('-')[-1])
+                quote_number = f"QUO-{last_num + 1:04d}"
+            else:
+                quote_number = "QUO-0001"
+
+            date_issued = datetime.strptime(request.form['date_issued'], '%Y-%m-%d').date()
+            
+            # Calculate valid until date (30 days from issue by default)
+            date_valid_until = date_issued + timedelta(days=30)
+            if request.form.get('date_valid_until'):
+                date_valid_until = datetime.strptime(request.form['date_valid_until'], '%Y-%m-%d').date()
+
+            # Get the selected time entries
+            selected_entries = request.form.getlist('time_entries')
+            if not selected_entries:
+                flash('Please select at least one time entry for the quote', 'danger')
+                return redirect(url_for('create_quote'))
+
+            # Calculate the subtotal and total
+            entries = TimeEntry.query.filter(TimeEntry.id.in_(selected_entries)).all()
+            subtotal = sum(entry.total_hours * entry.hourly_rate for entry in entries)
+
+            # Get company settings for HST rate
+            company = CompanySettings.query.first()
+            hst_rate = company.default_hst_rate if company else 0.13  # Default to 13% if not set
+
+            hst_amount = subtotal * hst_rate
+            total = subtotal + hst_amount
+
+            new_quote = Quote(
+                quote_number=quote_number,
+                client_id=client_id,
+                date_issued=date_issued,
+                date_valid_until=date_valid_until,
+                subtotal=subtotal,
+                hst_rate=hst_rate,
+                hst_amount=hst_amount,
+                total=total,
+                status=QuoteStatus.PENDING.value,
+                notes=request.form.get('notes', '')
+            )
+
+            db.session.add(new_quote)
+            db.session.commit()
+
+            # Update the time entries to link them to this quote
+            for entry in entries:
+                entry.quote_id = new_quote.id
+
+            db.session.commit()
+
+            flash('Quote created successfully!', 'success')
+            return redirect(url_for('view_quote', quote_id=new_quote.id))
+        except Exception as e:
+            db.session.rollback()
+            flash(f'Error creating quote: {str(e)}', 'danger')
+            return redirect(url_for('create_quote'))
+
+    return render_template('create_quote.html', clients=clients)
+
+@app.route('/get_unquoted_entries/<int:client_id>')
+def get_unquoted_entries(client_id):
+    entries = TimeEntry.query.filter_by(client_id=client_id, invoice_id=None, quote_id=None).order_by(TimeEntry.date).all()
+
+    entries_data = []
+    for entry in entries:
+        amount = entry.total_hours * entry.hourly_rate
+        entries_data.append({
+            'id': entry.id,
+            'date': entry.date.strftime('%Y-%m-%d'),
+            'item': entry.item,
+            'location': entry.location or '',
+            'hours': f"{entry.total_hours:.2f}",
+            'rate': f"${entry.hourly_rate:.2f}",
+            'amount': f"${amount:.2f}"
+        })
+
+    return jsonify(entries_data)
+
+@app.route('/quotes/<int:quote_id>')
+def view_quote(quote_id):
+    quote = Quote.query.get_or_404(quote_id)
+    company = CompanySettings.query.first()
+
+    return render_template('view_quote.html', quote=quote, company=company)
+
+@app.route('/quotes/<int:quote_id>/update_status', methods=['POST'])
+def update_quote_status(quote_id):
+    quote = Quote.query.get_or_404(quote_id)
+
+    try:
+        status = request.form['status']
+        quote.status = status
+        db.session.commit()
+        flash(f'Quote status updated to {status}!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating quote status: {str(e)}', 'danger')
+
+    return redirect(url_for('view_quote', quote_id=quote_id))
+
+@app.route('/quotes/<int:quote_id>/delete', methods=['POST'])
+def delete_quote(quote_id):
+    quote = Quote.query.get_or_404(quote_id)
+
+    try:
+        # First, unlink all time entries
+        for entry in quote.time_entries:
+            entry.quote_id = None
+
+        db.session.delete(quote)
+        db.session.commit()
+        flash('Quote deleted successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting quote: {str(e)}', 'danger')
+
+    return redirect(url_for('quotes'))
+
+@app.route('/quotes/<int:quote_id>/convert', methods=['POST'])
+def convert_quote_to_invoice(quote_id):
+    quote = Quote.query.get_or_404(quote_id)
+
+    try:
+        # Check if quote is already invoiced
+        if quote.status == QuoteStatus.INVOICED.value:
+            flash('This quote has already been converted to an invoice.', 'warning')
+            return redirect(url_for('view_quote', quote_id=quote_id))
+
+        # Convert quote to invoice
+        invoice = quote.convert_to_invoice()
+        
+        flash('Quote successfully converted to invoice!', 'success')
+        return redirect(url_for('view_invoice', invoice_id=invoice.id))
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error converting quote to invoice: {str(e)}', 'danger')
+        return redirect(url_for('view_quote', quote_id=quote_id))
+
+@app.route('/quotes/<int:quote_id>/download')
+def download_quote(quote_id):
+    quote = Quote.query.get_or_404(quote_id)
+    company = CompanySettings.query.first()
+
+    if not company:
+        flash('Please set up your company information first', 'danger')
+        return redirect(url_for('company_settings'))
+
+    try:
+        pdf_data = generate_quote_pdf(quote, company)
+
+        # Create a BytesIO object
+        pdf_io = io.BytesIO(pdf_data)
+        pdf_io.seek(0)
+
+        return send_file(
+            pdf_io,
+            as_attachment=True,
+            download_name=f"Quote_{quote.quote_number}.pdf",
+            mimetype='application/pdf'
+        )
+    except Exception as e:
+        flash(f'Error generating PDF: {str(e)}', 'danger')
+        return redirect(url_for('view_quote', quote_id=quote_id))
+
 # Reports route
 @app.route('/reports')
 def reports():
@@ -658,3 +958,177 @@ def company_settings():
             flash(f'Error updating company settings: {str(e)}', 'danger')
 
     return render_template('company_settings.html', company=company)
+
+# Calendar Routes
+
+@app.route('/calendar')
+def calendar():
+    clients = Client.query.order_by(Client.name).all()
+    tasks = Task.query.order_by(Task.title).all()
+    return render_template('calendar.html', clients=clients, tasks=tasks)
+
+@app.route('/api/calendar-events')
+def get_calendar_events():
+    start = request.args.get('start')
+    end = request.args.get('end')
+    
+    query = CalendarEvent.query
+    if start:
+        try:
+            # Handle possible 'Z' at the end of ISO string
+            start_dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
+            query = query.filter(CalendarEvent.start_time >= start_dt)
+        except ValueError:
+            pass
+    if end:
+        try:
+            end_dt = datetime.fromisoformat(end.replace('Z', '+00:00'))
+            query = query.filter(CalendarEvent.end_time <= end_dt)
+        except ValueError:
+            pass
+    
+    events = query.all()
+    events_list = []
+    for event in events:
+        events_list.append({
+            'id': event.id,
+            'title': event.title,
+            'start': event.start_time.isoformat(),
+            'end': event.end_time.isoformat(),
+            'allDay': event.all_day,
+            'extendedProps': {
+                'location': event.location,
+                'client_id': event.client_id,
+                'client_name': event.client.name,
+                'task_id': event.task_id,
+                'task_title': event.task.title if event.task else None,
+                'is_billable': event.is_billable
+            }
+        })
+    return jsonify(events_list)
+
+@app.route('/calendar/add', methods=['POST'])
+def add_calendar_event():
+    try:
+        title = request.form.get('title')
+        location = request.form.get('location')
+        all_day = 'all_day' in request.form
+        start_time_str = request.form.get('start_time')
+        end_time_str = request.form.get('end_time')
+        client_id_str = request.form.get('client_id')
+        task_id = request.form.get('task_id')
+        is_billable = 'is_billable' in request.form
+
+        if not client_id_str:
+            flash('Client is required', 'danger')
+            return redirect(url_for('calendar'))
+            
+        client_id = int(client_id_str)
+        # Handle ISO strings from datetime-local input (YYYY-MM-DDTHH:MM)
+        start_time = datetime.fromisoformat(start_time_str)
+        end_time = datetime.fromisoformat(end_time_str)
+
+        if task_id and task_id != '':
+            task_id = int(task_id)
+        else:
+            task_id = None
+
+        new_event = CalendarEvent(
+            title=title,
+            location=location,
+            all_day=all_day,
+            start_time=start_time,
+            end_time=end_time,
+            client_id=client_id,
+            task_id=task_id,
+            is_billable=is_billable
+        )
+
+        db.session.add(new_event)
+        
+        if is_billable:
+            # Create a time entry
+            client = Client.query.get(client_id)
+            new_entry = TimeEntry(
+                client_id=client_id,
+                location=location,
+                item=title,
+                task_id=task_id,
+                date=start_time.date(),
+                time_in=start_time.time(),
+                time_out=end_time.time(),
+                total_hours=calculate_hours(start_time.time(), end_time.time()),
+                hourly_rate=client.get_default_rate()
+            )
+            db.session.add(new_entry)
+
+        db.session.commit()
+        flash('Event added successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error adding event: {str(e)}', 'danger')
+    
+    return redirect(url_for('calendar'))
+
+@app.route('/calendar/edit/<int:event_id>', methods=['POST'])
+def edit_calendar_event(event_id):
+    event = CalendarEvent.query.get_or_404(event_id)
+    try:
+        event.title = request.form.get('title')
+        event.location = request.form.get('location')
+        event.all_day = 'all_day' in request.form
+        event.start_time = datetime.fromisoformat(request.form.get('start_time'))
+        event.end_time = datetime.fromisoformat(request.form.get('end_time'))
+        
+        client_id_str = request.form.get('client_id')
+        if client_id_str:
+            event.client_id = int(client_id_str)
+            
+        task_id = request.form.get('task_id')
+        if task_id and task_id != '':
+            event.task_id = int(task_id)
+        else:
+            event.task_id = None
+            
+        new_is_billable = 'is_billable' in request.form
+        if new_is_billable and not event.is_billable:
+            client = Client.query.get(event.client_id)
+            new_entry = TimeEntry(
+                client_id=event.client_id,
+                location=event.location,
+                item=event.title,
+                task_id=event.task_id,
+                date=event.start_time.date(),
+                time_in=event.start_time.time(),
+                time_out=event.end_time.time(),
+                total_hours=calculate_hours(event.start_time.time(), event.end_time.time()),
+                hourly_rate=client.get_default_rate()
+            )
+            db.session.add(new_entry)
+        
+        event.is_billable = new_is_billable
+        db.session.commit()
+        flash('Event updated successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error updating event: {str(e)}', 'danger')
+    
+    return redirect(url_for('calendar'))
+
+@app.route('/calendar/delete/<int:event_id>', methods=['POST'])
+def delete_calendar_event(event_id):
+    event = CalendarEvent.query.get_or_404(event_id)
+    try:
+        db.session.delete(event)
+        db.session.commit()
+        flash('Event deleted successfully!', 'success')
+    except Exception as e:
+        db.session.rollback()
+        flash(f'Error deleting event: {str(e)}', 'danger')
+    
+    return redirect(url_for('calendar'))
+
+@app.route('/calendar/from-task/<int:task_id>')
+def create_event_from_task(task_id):
+    task = Task.query.get_or_404(task_id)
+    return redirect(url_for('calendar', prefill_task_id=task_id))

@@ -1,0 +1,239 @@
+{% extends 'layout.html' %}
+
+{% block title %}Quote {{ quote.quote_number }} - Time Tracker & Invoicing{% endblock %}
+
+{% block content %}
+<div class="row mb-4">
+    <div class="col-md-6">
+        <h1><i class="fas fa-file-contract"></i> Quote #{{ quote.quote_number }}</h1>
+    </div>
+    <div class="col-md-6 text-end">
+        <div class="btn-group" role="group">
+            <a href="{{ url_for('download_quote', quote_id=quote.id) }}" class="btn btn-primary">
+                <i class="fas fa-download"></i> Download PDF
+            </a>
+            {% if quote.status != 'invoiced' %}
+            <form action="{{ url_for('convert_quote_to_invoice', quote_id=quote.id) }}" method="post" class="d-inline">
+                <button type="submit" class="btn btn-success">
+                    <i class="fas fa-file-invoice-dollar"></i> Convert to Invoice
+                </button>
+            </form>
+            {% endif %}
+            <button class="btn btn-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                <i class="fas fa-cog"></i> Actions
+            </button>
+            <ul class="dropdown-menu dropdown-menu-end">
+                <li>
+                    <button class="dropdown-item" data-bs-toggle="modal" data-bs-target="#statusModal">
+                        <i class="fas fa-edit"></i> Change Status
+                    </button>
+                </li>
+                <li>
+                    <button class="dropdown-item text-danger" data-bs-toggle="modal" data-bs-target="#deleteQuoteModal">
+                        <i class="fas fa-trash"></i> Delete Quote
+                    </button>
+                </li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-6">
+                <div class="d-flex align-items-center mb-2">
+                    <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Company Logo" height="40" class="me-2">
+                    <h3 class="mb-0">{{ company.company_name }}</h3>
+                </div>
+                {% if company.address %}
+                    <p>{{ company.address }}</p>
+                {% endif %}
+                {% if company.city and company.province and company.postal_code %}
+                    <p>{{ company.city }}, {{ company.province }} {{ company.postal_code }}</p>
+                {% endif %}
+                {% if company.phone %}
+                    <p>Phone: {{ company.phone }}</p>
+                {% endif %}
+                {% if company.email %}
+                    <p>Email: {{ company.email }}</p>
+                {% endif %}
+                {% if company.tax_number %}
+                    <p>HST #: {{ company.tax_number }}</p>
+                {% endif %}
+            </div>
+            <div class="col-md-6 text-md-end">
+                <h2 class="text-primary">QUOTE</h2>
+                <p><strong>Quote #:</strong> {{ quote.quote_number }}</p>
+                <p><strong>Date Issued:</strong> {{ quote.date_issued.strftime('%Y-%m-%d') }}</p>
+                <p><strong>Valid Until:</strong> {{ quote.date_valid_until.strftime('%Y-%m-%d') }}</p>
+                <p><strong>Status:</strong> 
+                    {% if quote.status == 'pending' %}
+                        <span class="badge bg-secondary">Pending</span>
+                    {% elif quote.status == 'sent' %}
+                        <span class="badge bg-primary">Sent</span>
+                    {% elif quote.status == 'accepted' %}
+                        <span class="badge bg-success">Accepted</span>
+                    {% elif quote.status == 'invoiced' %}
+                        <span class="badge bg-info">Invoiced</span>
+                        {% if quote.invoice %}
+                            <a href="{{ url_for('view_invoice', invoice_id=quote.invoice.id) }}" class="btn btn-sm btn-outline-info ms-2">
+                                View Invoice
+                            </a>
+                        {% endif %}
+                    {% elif quote.status == 'rejected' %}
+                        <span class="badge bg-danger">Rejected</span>
+                    {% endif %}
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h4>Prepared For</h4>
+    </div>
+    <div class="card-body">
+        <h4>{{ quote.client.name }}</h4>
+        {% if quote.client.contact_person %}
+            <p>Attn: {{ quote.client.contact_person }}</p>
+        {% endif %}
+        {% if quote.client.address %}
+            <p>{{ quote.client.address }}</p>
+        {% endif %}
+        {% if quote.client.city and quote.client.province and quote.client.postal_code %}
+            <p>{{ quote.client.city }}, {{ quote.client.province }} {{ quote.client.postal_code }}</p>
+        {% endif %}
+        {% if quote.client.phone %}
+            <p>Phone: {{ quote.client.phone }}</p>
+        {% endif %}
+        {% if quote.client.email %}
+            <p>Email: {{ quote.client.email }}</p>
+        {% endif %}
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h4>Services</h4>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>Date</th>
+                        <th>Description</th>
+                        <th>Location</th>
+                        <th>Hours</th>
+                        <th>Rate</th>
+                        <th>Amount</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for entry in quote.time_entries %}
+                    <tr>
+                        <td>{{ entry.date.strftime('%Y-%m-%d') }}</td>
+                        <td>{{ entry.item }}</td>
+                        <td>{{ entry.location or '' }}</td>
+                        <td>{{ entry.total_hours }}</td>
+                        <td>${{ entry.hourly_rate|round(2) }}</td>
+                        <td>${{ (entry.total_hours * entry.hourly_rate)|round(2) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr>
+                        <td colspan="4"></td>
+                        <td class="text-end"><strong>Subtotal:</strong></td>
+                        <td>${{ quote.subtotal|round(2) }}</td>
+                    </tr>
+                    <tr>
+                        <td colspan="4"></td>
+                        <td class="text-end"><strong>HST ({{ (quote.hst_rate * 100)|int }}%):</strong></td>
+                        <td>${{ quote.hst_amount|round(2) }}</td>
+                    </tr>
+                    <tr class="table-active">
+                        <td colspan="4"></td>
+                        <td class="text-end"><strong>Total:</strong></td>
+                        <td><strong>${{ quote.total|round(2) }}</strong></td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+    </div>
+</div>
+
+{% if quote.notes %}
+<div class="card mb-4">
+    <div class="card-header">
+        <h4>Notes</h4>
+    </div>
+    <div class="card-body">
+        <p>{{ quote.notes }}</p>
+    </div>
+</div>
+{% endif %}
+
+<div class="card mb-4">
+    <div class="card-header">
+        <h4>Terms and Conditions</h4>
+    </div>
+    <div class="card-body">
+        <p>This quote is valid until {{ quote.date_valid_until.strftime('%Y-%m-%d') }}. To accept this quote, please contact us.</p>
+    </div>
+</div>
+
+<!-- Status Change Modal -->
+<div class="modal fade" id="statusModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Change Quote Status</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                <form action="{{ url_for('update_quote_status', quote_id=quote.id) }}" method="post">
+                    <div class="mb-3">
+                        <label for="status" class="form-label">Status</label>
+                        <select class="form-select" id="status" name="status">
+                            <option value="pending">Pending</option>
+                            <option value="sent">Sent</option>
+                            <option value="accepted">Accepted</option>
+                            <option value="rejected">Rejected</option>
+                            <option value="invoiced">Invoiced</option>
+                        </select>
+                    </div>
+                    <div class="text-end">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                        <button type="submit" class="btn btn-primary">Update Status</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Delete Confirmation Modal -->
+<div class="modal fade" id="deleteQuoteModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">Confirm Delete</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body">
+                Are you sure you want to delete quote <strong>{{ quote.quote_number }}</strong>?
+                This will unlink all time entries from this quote.
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                <form action="{{ url_for('delete_quote', quote_id=quote.id) }}" method="post">
+                    <button type="submit" class="btn btn-danger">Delete</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

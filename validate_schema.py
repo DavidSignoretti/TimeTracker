@@ -1,20 +1,23 @@
-from app import app, db
-import models
-from models import Client, HourlyRate
 import sqlite3
 import os
-import inspect
 import sys
+from app import app, db
+import models
 
 def get_expected_tables():
     """Get the expected tables from the SQLAlchemy models"""
     expected_tables = {}
     
     # Get all model classes from models.py
-    model_classes = []
-    for name, obj in inspect.getmembers(models):
-        if inspect.isclass(obj) and hasattr(obj, '__tablename__'):
-            model_classes.append(obj)
+    model_classes = [
+        models.HourlyRate,
+        models.Client,
+        models.TimeEntry,
+        models.Invoice,
+        models.Task,
+        models.Quote,
+        models.CompanySettings
+    ]
     
     # Extract table info from each model
     for model_class in model_classes:
@@ -26,20 +29,13 @@ def get_expected_tables():
         # Get column info
         for column_name, column in model_class.__table__.columns.items():
             column_type = str(column.type)
-            nullable = not column.nullable
-            primary_key = column.primary_key
-            foreign_key = None
-            
-            # Check for foreign keys
-            if column.foreign_keys:
-                for fk in column.foreign_keys:
-                    foreign_key = str(fk.target_fullname)
+            nullable = "NULL" if column.nullable else "NOT NULL"
+            primary_key = "PRIMARY KEY" if column.primary_key else ""
             
             expected_tables[table_name]['columns'][column_name] = {
                 'type': column_type,
                 'nullable': nullable,
-                'primary_key': primary_key,
-                'foreign_key': foreign_key
+                'primary_key': primary_key
             }
     
     return expected_tables
@@ -71,21 +67,13 @@ def get_actual_tables(db_path):
         
         for column in columns:
             cid, name, type_, notnull, dflt_value, pk = column
-            
-            # Get foreign key info
-            cursor.execute(f"PRAGMA foreign_key_list({table_name})")
-            foreign_keys = cursor.fetchall()
-            
-            foreign_key = None
-            for fk in foreign_keys:
-                if fk[3] == name:  # If this column is a foreign key
-                    foreign_key = f"{fk[2]}.{fk[4]}"
+            nullable = "NOT NULL" if notnull else "NULL"
+            primary_key = "PRIMARY KEY" if pk else ""
             
             actual_tables[table_name]['columns'][name] = {
                 'type': type_,
-                'nullable': notnull == 1,
-                'primary_key': pk == 1,
-                'foreign_key': foreign_key
+                'nullable': nullable,
+                'primary_key': primary_key
             }
     
     conn.close()
@@ -97,12 +85,9 @@ def validate_schema(db_path):
         expected_tables = get_expected_tables()
         actual_tables = get_actual_tables(db_path)
         
-        issues_found = False
-        
         # Check for missing tables
         missing_tables = set(expected_tables.keys()) - set(actual_tables.keys())
         if missing_tables:
-            issues_found = True
             print(f"Missing tables: {', '.join(missing_tables)}")
         
         # Check for extra tables
@@ -118,7 +103,6 @@ def validate_schema(db_path):
             # Check for missing columns
             missing_columns = set(expected_columns.keys()) - set(actual_columns.keys())
             if missing_columns:
-                issues_found = True
                 print(f"Table '{table_name}' is missing columns: {', '.join(missing_columns)}")
             
             # Check for extra columns
@@ -126,7 +110,7 @@ def validate_schema(db_path):
             if extra_columns:
                 print(f"Table '{table_name}' has extra columns: {', '.join(extra_columns)}")
         
-        if not issues_found:
+        if not missing_tables and not extra_tables and not missing_columns and not extra_columns:
             print(f"Database schema for {db_path} is valid!")
             return True
         else:
@@ -158,11 +142,10 @@ def fix_schema(db_path):
             for column_name in missing_columns:
                 column_info = expected_columns[column_name]
                 column_type = column_info['type']
-                nullable = "" if column_info['nullable'] else "NOT NULL"
                 
                 print(f"Adding missing column '{column_name}' to table '{table_name}'")
                 try:
-                    cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type} {nullable}")
+                    cursor.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {column_type} {column_info['nullable']}")
                 except sqlite3.OperationalError as e:
                     print(f"Error adding column: {e}")
         
@@ -172,50 +155,18 @@ def fix_schema(db_path):
         # Validate again to confirm fixes
         return validate_schema(db_path)
 
-def migrate_hourly_rates():
-    """Migrate existing client hourly rates to the hourly_rate table"""
-    with app.app_context():
-        # Migrate existing client hourly rates to the new table
-        clients = Client.query.all()
-        for client in clients:
-            # Check if client already has a default hourly rate
-            existing_default = HourlyRate.query.filter_by(
-                client_id=client.id, 
-                is_default=True
-            ).first()
-            
-            if not existing_default and client.hourly_rate > 0:
-                # Create a default hourly rate entry for this client
-                default_rate = HourlyRate(
-                    client_id=client.id,
-                    name="Default Rate",
-                    rate=client.hourly_rate,
-                    is_default=True
-                )
-                db.session.add(default_rate)
-                print(f"Created default hourly rate for client {client.name}")
-        
-        # Commit the changes
-        db.session.commit()
-        print("Hourly rate migration completed successfully!")
-
-def migrate_database():
-    with app.app_context():
-        # Get the database path
-        db_path = os.path.join('instance', 'timetracker.db')
-        
-        # Validate the schema
-        print(f"Validating schema for {db_path}...")
-        schema_valid = validate_schema(db_path)
-        
-        if not schema_valid:
-            print("Schema issues found. Fixing...")
-            fix_schema(db_path)
-        
-        # Migrate hourly rates if needed
-        migrate_hourly_rates()
-        
-        print("Database migration and validation completed successfully!")
-
 if __name__ == "__main__":
-    migrate_database()
+    # Check both database files
+    db_paths = [
+        os.path.join('instance', 'database.sqlite'),
+        os.path.join('instance', 'timetracker.db')
+    ]
+    
+    for db_path in db_paths:
+        if os.path.exists(db_path):
+            print(f"\nValidating schema for {db_path}...")
+            if not validate_schema(db_path):
+                print(f"Automatically fixing schema for {db_path}...")
+                fix_schema(db_path)
+        else:
+            print(f"\nDatabase file {db_path} does not exist.")

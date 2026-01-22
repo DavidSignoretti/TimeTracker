@@ -16,6 +16,9 @@ document.addEventListener('DOMContentLoaded', function() {
         return new bootstrap.Popover(popoverTriggerEl);
     });
 
+    // Handle hourly rates in client forms
+    initHourlyRatesManager();
+
     // Auto-close alert messages after 5 seconds
     const alertList = document.querySelectorAll('.alert:not(.alert-permanent)');
     alertList.forEach(function(alert) {
@@ -34,7 +37,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.value = '$' + value.toFixed(2);
             }
         });
-        
+
         input.addEventListener('focus', function() {
             this.value = this.value.replace(/[^\d.-]/g, '');
         });
@@ -49,7 +52,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 this.value = value.toFixed(2) + '%';
             }
         });
-        
+
         input.addEventListener('focus', function() {
             this.value = this.value.replace(/[^\d.-]/g, '');
         });
@@ -68,10 +71,10 @@ document.addEventListener('DOMContentLoaded', function() {
     // Add "active" class to current navigation item
     const currentPath = window.location.pathname;
     const navLinks = document.querySelectorAll('.navbar-nav .nav-link');
-    
+
     navLinks.forEach(function(link) {
         const href = link.getAttribute('href');
-        
+
         // Match the exact path or the start of the path
         if (href === currentPath || 
             (href !== '/' && currentPath.startsWith(href))) {
@@ -92,32 +95,32 @@ document.addEventListener('DOMContentLoaded', function() {
         const timeInElement = document.getElementById('time_in');
         const timeOutElement = document.getElementById('time_out');
         const totalHoursElement = document.getElementById('total_hours');
-        
+
         if (timeInElement && timeOutElement && totalHoursElement) {
             const timeIn = timeInElement.value;
             const timeOut = timeOutElement.value;
-            
+
             if (timeIn && timeOut) {
                 // Parse the time values
                 const [inHours, inMinutes] = timeIn.split(':').map(Number);
                 const [outHours, outMinutes] = timeOut.split(':').map(Number);
-                
+
                 // Calculate duration in minutes
                 let durationMinutes = (outHours * 60 + outMinutes) - (inHours * 60 + inMinutes);
-                
+
                 // Handle overnight shifts
                 if (durationMinutes < 0) {
                     durationMinutes += 24 * 60;
                 }
-                
+
                 // Convert to hours with 2 decimal places
                 const durationHours = (durationMinutes / 60).toFixed(2);
                 totalHoursElement.value = durationHours;
-                
+
                 // Update total amount if rate is available
                 const hourlyRateElement = document.getElementById('hourly_rate');
                 const totalAmountElement = document.getElementById('total_amount');
-                
+
                 if (hourlyRateElement && totalAmountElement) {
                     const hourlyRate = parseFloat(hourlyRateElement.value);
                     if (!isNaN(hourlyRate)) {
@@ -145,11 +148,11 @@ function filterTable(tableId, inputId) {
     const filter = input.value.toUpperCase();
     const table = document.getElementById(tableId);
     const rows = table.getElementsByTagName('tr');
-    
+
     for (let i = 1; i < rows.length; i++) { // Start at 1 to skip header row
         let visible = false;
         const cells = rows[i].getElementsByTagName('td');
-        
+
         for (let j = 0; j < cells.length; j++) {
             const cell = cells[j];
             if (cell) {
@@ -160,8 +163,80 @@ function filterTable(tableId, inputId) {
                 }
             }
         }
-        
+
         rows[i].style.display = visible ? '' : 'none';
+    }
+}
+
+// Hourly rates manager for client forms
+function initHourlyRatesManager() {
+    const addRateBtn = document.getElementById('add-rate-btn');
+    const ratesContainer = document.getElementById('hourly-rates-container');
+
+    if (!addRateBtn || !ratesContainer) {
+        return; // Not on a client form page
+    }
+
+    // Add a new rate row
+    addRateBtn.addEventListener('click', function() {
+        // Remove the "no rates" message if it exists
+        const noRatesMsg = ratesContainer.querySelector('.alert-info');
+        if (noRatesMsg) {
+            noRatesMsg.remove();
+        }
+
+        // Get the template and clone it
+        const template = document.getElementById('rate-row-template');
+        const clone = document.importNode(template.content, true);
+
+        // Set the default rate radio value to the current row count
+        const rowCount = ratesContainer.querySelectorAll('.hourly-rate-row').length;
+        const radioBtn = clone.querySelector('.default-rate-checkbox');
+        radioBtn.value = rowCount;
+
+        // Add event listener for the remove button
+        const removeBtn = clone.querySelector('.remove-rate');
+        removeBtn.addEventListener('click', function() {
+            this.closest('.hourly-rate-row').remove();
+            updateDefaultRateRadios();
+
+            // If no rates left, show the "no rates" message
+            if (ratesContainer.querySelectorAll('.hourly-rate-row').length === 0) {
+                const noRatesMsg = document.createElement('div');
+                noRatesMsg.className = 'alert alert-info';
+                noRatesMsg.textContent = 'No hourly rates defined yet. Add your first rate below.';
+                ratesContainer.appendChild(noRatesMsg);
+            }
+        });
+
+        // Append the new row
+        ratesContainer.appendChild(clone);
+    });
+
+    // Add event listeners to existing remove buttons
+    const removeButtons = ratesContainer.querySelectorAll('.remove-rate');
+    removeButtons.forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            this.closest('.hourly-rate-row').remove();
+            updateDefaultRateRadios();
+
+            // If no rates left, show the "no rates" message
+            if (ratesContainer.querySelectorAll('.hourly-rate-row').length === 0) {
+                const noRatesMsg = document.createElement('div');
+                noRatesMsg.className = 'alert alert-info';
+                noRatesMsg.textContent = 'No hourly rates defined yet. Add your first rate below.';
+                ratesContainer.appendChild(noRatesMsg);
+            }
+        });
+    });
+
+    // Function to update the default rate radio values
+    function updateDefaultRateRadios() {
+        const rows = ratesContainer.querySelectorAll('.hourly-rate-row');
+        rows.forEach(function(row, index) {
+            const radio = row.querySelector('.default-rate-checkbox');
+            radio.value = index;
+        });
     }
 }
 

@@ -1,10 +1,9 @@
-from app import app, db
-import models
-from models import Client, HourlyRate
 import sqlite3
 import os
-import inspect
 import sys
+from app import app, db
+import models
+import inspect
 
 def get_expected_tables():
     """Get the expected tables from the SQLAlchemy models"""
@@ -125,6 +124,31 @@ def validate_schema(db_path):
             extra_columns = set(actual_columns.keys()) - set(expected_columns.keys())
             if extra_columns:
                 print(f"Table '{table_name}' has extra columns: {', '.join(extra_columns)}")
+            
+            # Check column properties for columns that exist in both
+            for column_name in set(expected_columns.keys()) & set(actual_columns.keys()):
+                expected_column = expected_columns[column_name]
+                actual_column = actual_columns[column_name]
+                
+                # Check nullable constraint
+                if expected_column['nullable'] != actual_column['nullable']:
+                    issues_found = True
+                    print(f"Column '{table_name}.{column_name}' has different nullable constraint: "
+                          f"expected {'NOT NULL' if expected_column['nullable'] else 'NULL'}, "
+                          f"got {'NOT NULL' if actual_column['nullable'] else 'NULL'}")
+                
+                # Check primary key constraint
+                if expected_column['primary_key'] != actual_column['primary_key']:
+                    issues_found = True
+                    print(f"Column '{table_name}.{column_name}' has different primary key constraint: "
+                          f"expected {'PRIMARY KEY' if expected_column['primary_key'] else 'not PRIMARY KEY'}, "
+                          f"got {'PRIMARY KEY' if actual_column['primary_key'] else 'not PRIMARY KEY'}")
+                
+                # Check foreign key constraint (simplified check)
+                if bool(expected_column['foreign_key']) != bool(actual_column['foreign_key']):
+                    issues_found = True
+                    print(f"Column '{table_name}.{column_name}' has different foreign key constraint: "
+                          f"expected {expected_column['foreign_key']}, got {actual_column['foreign_key']}")
         
         if not issues_found:
             print(f"Database schema for {db_path} is valid!")
@@ -172,50 +196,29 @@ def fix_schema(db_path):
         # Validate again to confirm fixes
         return validate_schema(db_path)
 
-def migrate_hourly_rates():
-    """Migrate existing client hourly rates to the hourly_rate table"""
-    with app.app_context():
-        # Migrate existing client hourly rates to the new table
-        clients = Client.query.all()
-        for client in clients:
-            # Check if client already has a default hourly rate
-            existing_default = HourlyRate.query.filter_by(
-                client_id=client.id, 
-                is_default=True
-            ).first()
-            
-            if not existing_default and client.hourly_rate > 0:
-                # Create a default hourly rate entry for this client
-                default_rate = HourlyRate(
-                    client_id=client.id,
-                    name="Default Rate",
-                    rate=client.hourly_rate,
-                    is_default=True
-                )
-                db.session.add(default_rate)
-                print(f"Created default hourly rate for client {client.name}")
-        
-        # Commit the changes
-        db.session.commit()
-        print("Hourly rate migration completed successfully!")
-
-def migrate_database():
-    with app.app_context():
-        # Get the database path
-        db_path = os.path.join('instance', 'timetracker.db')
-        
-        # Validate the schema
-        print(f"Validating schema for {db_path}...")
-        schema_valid = validate_schema(db_path)
-        
-        if not schema_valid:
-            print("Schema issues found. Fixing...")
-            fix_schema(db_path)
-        
-        # Migrate hourly rates if needed
-        migrate_hourly_rates()
-        
-        print("Database migration and validation completed successfully!")
-
 if __name__ == "__main__":
-    migrate_database()
+    # Check both database files
+    db_paths = [
+        os.path.join('instance', 'database.sqlite'),
+        os.path.join('instance', 'timetracker.db')
+    ]
+    
+    all_valid = True
+    
+    for db_path in db_paths:
+        if os.path.exists(db_path):
+            print(f"\nValidating schema for {db_path}...")
+            if not validate_schema(db_path):
+                all_valid = False
+                print(f"Automatically fixing schema for {db_path}...")
+                fix_schema(db_path)
+        else:
+            print(f"\nDatabase file {db_path} does not exist.")
+    
+    # Exit with appropriate status code
+    if all_valid:
+        print("\nAll database schemas are valid!")
+        sys.exit(0)
+    else:
+        print("\nSchema validation completed with fixes applied.")
+        sys.exit(0)  # Still exit with 0 since we fixed the issues

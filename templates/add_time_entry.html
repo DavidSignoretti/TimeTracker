@@ -20,17 +20,25 @@
                             <select class="form-select" id="client_id" name="client_id" required>
                                 <option value="">Select a client</option>
                                 {% for client in clients %}
-                                    <option value="{{ client.id }}" data-rate="{{ client.hourly_rate }}">{{ client.name }}</option>
+                                    <option value="{{ client.id }}" 
+                                            data-default-rate="{{ client.get_default_rate() }}"
+                                            data-rates='{{ client.hourly_rates|map(attribute="rate")|list|tojson }}'
+                                            data-rate-names='{{ client.hourly_rates|map(attribute="name")|list|tojson }}'
+                                            data-rate-ids='{{ client.hourly_rates|map(attribute="id")|list|tojson }}'>
+                                        {{ client.name }}
+                                    </option>
                                 {% endfor %}
                             </select>
                         </div>
                         <div class="col-md-6">
-                            <label for="hourly_rate" class="form-label">Hourly Rate ($)</label>
-                            <input type="number" min="0" step="0.01" class="form-control" id="hourly_rate" readonly>
-                            <small class="form-text text-muted">Based on client's default rate</small>
+                            <label for="rate_id" class="form-label">Hourly Rate</label>
+                            <select class="form-select" id="rate_id" name="rate_id" required>
+                                <option value="">Select a client first</option>
+                            </select>
+                            <input type="hidden" id="hourly_rate" name="hourly_rate">
                         </div>
                     </div>
-                    
+
                     <div class="row mb-3">
                         <div class="col-md-4">
                             <label for="date" class="form-label">Date *</label>
@@ -45,14 +53,14 @@
                             <input type="time" class="form-control" id="time_out" name="time_out" required>
                         </div>
                     </div>
-                    
+
                     <div class="row mb-3">
                         <div class="col-md-12">
                             <label for="item" class="form-label">Item/Task Description *</label>
                             <input type="text" class="form-control" id="item" name="item" required>
                         </div>
                     </div>
-                    
+
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label for="location" class="form-label">Location</label>
@@ -64,7 +72,7 @@
                             <small class="form-text text-muted">Will be calculated automatically</small>
                         </div>
                     </div>
-                    
+
                     <div class="row mb-3">
                         <div class="col-md-6">
                             <label for="total_amount" class="form-label">Total Amount</label>
@@ -72,7 +80,7 @@
                             <small class="form-text text-muted">Will be calculated automatically</small>
                         </div>
                     </div>
-                    
+
                     <div class="text-end">
                         <a href="{{ url_for('time_entries') }}" class="btn btn-secondary">Cancel</a>
                         <button type="submit" class="btn btn-primary">Save Time Entry</button>
@@ -93,48 +101,105 @@ document.addEventListener('DOMContentLoaded', function() {
     const timeOutInput = document.getElementById('time_out');
     const totalHoursInput = document.getElementById('total_hours');
     const totalAmountInput = document.getElementById('total_amount');
-    
-    // Update hourly rate when client changes
+
+    // Elements for hourly rate selection
+    const rateSelect = document.getElementById('rate_id');
+
+    // Update hourly rates dropdown when client changes
     clientSelect.addEventListener('change', function() {
         const selectedOption = this.options[this.selectedIndex];
-        const rate = selectedOption.getAttribute('data-rate');
-        hourlyRateInput.value = rate || '';
+        if (!selectedOption.value) {
+            // No client selected
+            rateSelect.innerHTML = '<option value="">Select a client first</option>';
+            hourlyRateInput.value = '';
+            calculateTotals();
+            return;
+        }
+
+        // Get rates data from the selected client
+        const rates = JSON.parse(selectedOption.getAttribute('data-rates') || '[]');
+        const rateNames = JSON.parse(selectedOption.getAttribute('data-rate-names') || '[]');
+        const rateIds = JSON.parse(selectedOption.getAttribute('data-rate-ids') || '[]');
+        const defaultRate = parseFloat(selectedOption.getAttribute('data-default-rate') || 0);
+
+        // Clear and populate the rates dropdown
+        rateSelect.innerHTML = '';
+
+        if (rates.length === 0) {
+            // If no rates, use the default rate
+            const option = document.createElement('option');
+            option.value = 'default';
+            option.textContent = `Default Rate ($${defaultRate.toFixed(2)})`;
+            option.setAttribute('data-rate', defaultRate);
+            rateSelect.appendChild(option);
+
+            hourlyRateInput.value = defaultRate;
+        } else {
+            // Add all available rates
+            for (let i = 0; i < rates.length; i++) {
+                const option = document.createElement('option');
+                option.value = rateIds[i];
+                option.textContent = `${rateNames[i]} ($${parseFloat(rates[i]).toFixed(2)})`;
+                option.setAttribute('data-rate', rates[i]);
+                rateSelect.appendChild(option);
+            }
+
+            // Select the first rate by default
+            if (rateSelect.options.length > 0) {
+                rateSelect.selectedIndex = 0;
+                const rate = parseFloat(rateSelect.options[0].getAttribute('data-rate'));
+                hourlyRateInput.value = rate;
+            }
+        }
+
         calculateTotals();
     });
-    
+
+    // Update hourly rate when rate selection changes
+    rateSelect.addEventListener('change', function() {
+        const selectedOption = this.options[this.selectedIndex];
+        if (!selectedOption.value) {
+            hourlyRateInput.value = '';
+        } else {
+            const rate = parseFloat(selectedOption.getAttribute('data-rate'));
+            hourlyRateInput.value = rate;
+        }
+        calculateTotals();
+    });
+
     // Calculate hours and amount when time in/out changes
     timeInInput.addEventListener('change', calculateTotals);
     timeOutInput.addEventListener('change', calculateTotals);
-    
+
     function calculateTotals() {
         if (!timeInInput.value || !timeOutInput.value) {
             totalHoursInput.value = '';
             totalAmountInput.value = '';
             return;
         }
-        
+
         // Parse times
         const timeIn = timeInInput.value.split(':');
         const timeOut = timeOutInput.value.split(':');
-        
+
         let hours = parseInt(timeOut[0]) - parseInt(timeIn[0]);
         let minutes = parseInt(timeOut[1]) - parseInt(timeIn[1]);
-        
+
         // Handle overnight shifts
         if (hours < 0) {
             hours += 24;
         }
-        
+
         // Adjust for minutes
         if (minutes < 0) {
             hours -= 1;
             minutes += 60;
         }
-        
+
         // Calculate total hours with decimal
         const totalHours = hours + (minutes / 60);
         totalHoursInput.value = totalHours.toFixed(2);
-        
+
         // Calculate amount if hourly rate is set
         if (hourlyRateInput.value) {
             const rate = parseFloat(hourlyRateInput.value);

@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  timetracker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./instance:/app/instance
+    restart: unless-stopped
+    environment:
+      - FLASK_APP=main.py
+      - FLASK_ENV=production
+
+volumes:
+  sqlite_data:
+    # This creates a named volume that persists the SQLite database
+    # The data will survive container restarts and even removals
